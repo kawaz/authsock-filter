@@ -1,11 +1,11 @@
 //! Filter evaluation engine
 
 use crate::error::Result;
-use crate::filter::{Filter, FilterRule, GitHubKeysMatcher, KeyfileMatcher};
+use crate::filter::{Filter, FilterRule};
 use crate::protocol::Identity;
 
 /// Evaluator for a set of filter rules
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FilterEvaluator {
     /// Rules to evaluate (ANDed together)
     rules: Vec<FilterRule>,
@@ -82,12 +82,6 @@ impl FilterEvaluator {
     /// Get descriptions of all rules
     pub fn descriptions(&self) -> Vec<String> {
         self.rules.iter().map(|r| r.description()).collect()
-    }
-}
-
-impl Default for FilterEvaluator {
-    fn default() -> Self {
-        Self { rules: Vec::new() }
     }
 }
 

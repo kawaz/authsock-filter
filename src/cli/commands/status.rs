@@ -10,7 +10,7 @@ use crate::cli::args::StatusArgs;
 /// Default PID file path
 fn default_pid_file() -> PathBuf {
     dirs::runtime_dir()
-        .or_else(|| dirs::state_dir())
+        .or(dirs::state_dir())
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("authsock-filter.pid")
 }

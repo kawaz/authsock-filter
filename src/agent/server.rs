@@ -178,10 +178,12 @@ impl Drop for Server {
 }
 
 /// Guard that cleans up a socket path when dropped
+#[allow(dead_code)]
 pub struct SocketCleanupGuard {
     path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl SocketCleanupGuard {
     /// Create a new cleanup guard for the given socket path
     pub fn new<P: AsRef<Path>>(path: P) -> Self {

@@ -31,12 +31,9 @@ fn default_config_paths() -> Vec<PathBuf> {
 
 /// Find the first existing configuration file
 fn find_config_file() -> Option<PathBuf> {
-    for path in default_config_paths() {
-        if path.exists() {
-            return Some(path);
-        }
-    }
-    None
+    default_config_paths()
+        .into_iter()
+        .find(|path| path.exists())
 }
 
 /// Default configuration content
@@ -139,25 +136,23 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
                 }
             }
         }
-    } else {
-        if args.validate {
-            eprintln!("No configuration file found.");
-            eprintln!("Searched locations:");
-            for path in default_config_paths() {
-                eprintln!("  - {}", path.display());
-            }
-            std::process::exit(1);
-        } else {
-            println!("# No configuration file found");
-            println!("# Searched locations:");
-            for path in default_config_paths() {
-                println!("#   - {}", path.display());
-            }
-            println!();
-            println!("# Using default configuration:");
-            println!();
-            print!("{}", default_config());
+    } else if args.validate {
+        eprintln!("No configuration file found.");
+        eprintln!("Searched locations:");
+        for path in default_config_paths() {
+            eprintln!("  - {}", path.display());
         }
+        std::process::exit(1);
+    } else {
+        println!("# No configuration file found");
+        println!("# Searched locations:");
+        for path in default_config_paths() {
+            println!("#   - {}", path.display());
+        }
+        println!();
+        println!("# Using default configuration:");
+        println!();
+        print!("{}", default_config());
     }
 
     Ok(())

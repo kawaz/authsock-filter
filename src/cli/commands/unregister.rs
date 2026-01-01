@@ -1,6 +1,12 @@
 //! Unregister command - unregister the OS service
 
 use anyhow::{Context, Result};
+
+#[cfg(any(
+    target_os = "linux",
+    not(any(target_os = "macos", target_os = "linux"))
+))]
+use anyhow::bail;
 use std::fs;
 use std::path::PathBuf;
 use tracing::info;

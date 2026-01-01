@@ -99,6 +99,7 @@ pub fn load_config(path: &Path) -> crate::Result<ConfigFile> {
 /// Load configuration from the first found standard location
 ///
 /// Returns the default configuration if no file is found.
+#[allow(dead_code)]
 pub fn load_config_from_default_location() -> crate::Result<ConfigFile> {
     match find_config_file() {
         Some(path) => load_config(&path),
@@ -113,6 +114,7 @@ pub fn load_config_from_default_location() -> crate::Result<ConfigFile> {
 }
 
 /// Load configuration from a specific path or fall back to default locations
+#[allow(dead_code)]
 pub fn load_config_from_path_or_default(path: Option<&Path>) -> crate::Result<ConfigFile> {
     match path {
         Some(p) => load_config(p),

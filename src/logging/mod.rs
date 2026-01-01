@@ -16,21 +16,12 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
 /// Logging configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LogConfig {
     /// Verbosity level adjustment: -1 for quiet, 0 for normal, +1 for verbose
     pub verbosity: i8,
     /// Optional path to JSONL log file
     pub jsonl_path: Option<String>,
-}
-
-impl Default for LogConfig {
-    fn default() -> Self {
-        Self {
-            verbosity: 0,
-            jsonl_path: None,
-        }
-    }
 }
 
 impl LogConfig {

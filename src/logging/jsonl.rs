@@ -344,7 +344,7 @@ impl JsonlWriter {
         let mut writer = self
             .writer
             .lock()
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Lock poisoned"))?;
+            .map_err(|_| std::io::Error::other("Lock poisoned"))?;
 
         writeln!(writer, "{}", json)?;
         writer.flush()?;
@@ -357,7 +357,7 @@ impl JsonlWriter {
         let mut writer = self
             .writer
             .lock()
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Lock poisoned"))?;
+            .map_err(|_| std::io::Error::other("Lock poisoned"))?;
 
         writer.flush()
     }

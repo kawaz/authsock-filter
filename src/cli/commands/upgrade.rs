@@ -35,12 +35,7 @@ fn get_platform_asset_name() -> String {
     let arch = std::env::consts::ARCH;
 
     // Map architecture names
-    let arch_name = match arch {
-        "x86_64" => "x86_64",
-        "aarch64" => "aarch64",
-        "arm" => "arm",
-        _ => arch,
-    };
+    let arch_name = arch;
 
     // Map OS names
     let os_name = match os {

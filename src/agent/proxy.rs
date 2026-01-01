@@ -207,11 +207,13 @@ impl Proxy {
 }
 
 /// Builder for creating a Proxy with optional configuration
+#[allow(dead_code)]
 pub struct ProxyBuilder {
     upstream: Option<Upstream>,
     filter: FilterEvaluator,
 }
 
+#[allow(dead_code)]
 impl ProxyBuilder {
     /// Create a new proxy builder
     pub fn new() -> Self {

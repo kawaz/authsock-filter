@@ -138,7 +138,7 @@ mod tests {
     fn test_load_keys() {
         let mut file = NamedTempFile::new().unwrap();
         writeln!(file, "# Comment line").unwrap();
-        writeln!(file, "").unwrap();
+        writeln!(file).unwrap();
         writeln!(file, "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test@example.com").unwrap();
 
         let matcher = KeyfileMatcher::new(file.path().to_str().unwrap()).unwrap();
