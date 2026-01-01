@@ -1,0 +1,65 @@
+[package]
+name = "authsock-filter"
+version = "0.1.0"
+edition = "2021"
+description = "SSH agent proxy with filtering and logging"
+license = "MIT"
+authors = ["Yoshiaki Kawazu (@kawaz)"]
+repository = "https://github.com/kawaz/authsock-filter"
+keywords = ["ssh", "agent", "proxy", "filter"]
+categories = ["command-line-utilities", "network-programming"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "signal"] }
+
+# SSH key handling
+ssh-key = { version = "0.6", features = ["std"] }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Configuration
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# Pattern matching
+regex = "1"
+globset = "0.4"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Serialization for logging
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Byte manipulation
+bytes = "1"
+
+# Async utilities
+futures = "0.3"
+
+# HTTP client for GitHub API
+reqwest = { version = "0.12", features = ["json"] }
+
+# Path utilities
+dirs = "5"
+shellexpand = "3"
+
+# Unix system calls
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio-test = "0.4"
+
+[[bin]]
+name = "authsock-filter"
+path = "src/main.rs"
