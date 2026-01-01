@@ -173,13 +173,6 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
     // Download and install
     println!("Downloading {}...", asset.name);
 
-    // TODO: Implement actual download and installation
-    // 1. Download the asset to a temporary file
-    // 2. Verify checksum if available
-    // 3. Replace the current executable
-    // 4. Handle platform-specific installation (chmod +x on Unix)
-
-    /*
     let client = reqwest::Client::new();
     let response = client
         .get(&asset.browser_download_url)
@@ -192,14 +185,28 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
         bail!("Download failed: HTTP {}", response.status());
     }
 
+    let total_size = response.content_length().unwrap_or(asset.size);
+    println!("Download size: {} bytes", total_size);
+
     let bytes = response.bytes().await.context("Failed to read download")?;
+    println!("Downloaded {} bytes", bytes.len());
 
     // Get current executable path
     let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
+    info!(path = %current_exe.display(), "Current executable path");
+
+    // Create backup of current executable
+    let backup_path = current_exe.with_extension("bak");
+    if current_exe.exists() {
+        std::fs::copy(&current_exe, &backup_path)
+            .context("Failed to create backup of current executable")?;
+        info!(path = %backup_path.display(), "Created backup");
+    }
 
     // Write to temporary file first
     let temp_path = current_exe.with_extension("new");
     std::fs::write(&temp_path, &bytes).context("Failed to write new executable")?;
+    info!(path = %temp_path.display(), "Wrote new executable");
 
     // Make executable on Unix
     #[cfg(unix)]
@@ -208,20 +215,22 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
         let mut perms = std::fs::metadata(&temp_path)?.permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&temp_path, perms)?;
+        info!("Set executable permissions");
     }
 
     // Replace the executable
     std::fs::rename(&temp_path, &current_exe).context("Failed to replace executable")?;
+    info!("Replaced executable");
 
-    println!("Successfully upgraded to version {}", latest_version);
-    */
+    // Remove backup on success
+    if backup_path.exists() {
+        let _ = std::fs::remove_file(&backup_path);
+    }
 
     println!();
-    println!("[STUB] Download and installation not yet implemented.");
-    println!(
-        "Please download manually from: {}",
-        asset.browser_download_url
-    );
+    println!("Successfully upgraded to version {}", latest_version);
+    println!();
+    println!("Please restart any running instances of authsock-filter.");
 
     Ok(())
 }
