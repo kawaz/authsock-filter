@@ -83,13 +83,15 @@ impl Server {
     ///
     /// Returns `None` if the server is not bound or if the listener encounters a fatal error.
     pub async fn accept(&self) -> Result<UnixStream> {
-        let listener = self.listener.as_ref().ok_or_else(|| {
-            Error::Socket("Server is not bound".to_string())
-        })?;
+        let listener = self
+            .listener
+            .as_ref()
+            .ok_or_else(|| Error::Socket("Server is not bound".to_string()))?;
 
-        let (stream, _addr) = listener.accept().await.map_err(|e| {
-            Error::Socket(format!("Failed to accept connection: {}", e))
-        })?;
+        let (stream, _addr) = listener
+            .accept()
+            .await
+            .map_err(|e| Error::Socket(format!("Failed to accept connection: {}", e)))?;
 
         trace!("Accepted new client connection");
         Ok(stream)
@@ -111,9 +113,10 @@ impl Server {
         F: Fn(UnixStream) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<()>> + Send + 'static,
     {
-        let listener = self.listener.as_ref().ok_or_else(|| {
-            Error::Socket("Server is not bound".to_string())
-        })?;
+        let listener = self
+            .listener
+            .as_ref()
+            .ok_or_else(|| Error::Socket("Server is not bound".to_string()))?;
 
         let handler = Arc::new(handler);
 

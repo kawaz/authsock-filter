@@ -89,12 +89,8 @@ impl Proxy {
     /// Process a single request from the client
     async fn process_request(&self, request: AgentMessage) -> Result<AgentMessage> {
         match request.msg_type {
-            MessageType::RequestIdentities => {
-                self.handle_request_identities(request).await
-            }
-            MessageType::SignRequest => {
-                self.handle_sign_request(request).await
-            }
+            MessageType::RequestIdentities => self.handle_request_identities(request).await,
+            MessageType::SignRequest => self.handle_sign_request(request).await,
             _ => {
                 // Pass through other messages
                 self.forward_to_upstream(request).await
@@ -251,9 +247,9 @@ impl ProxyBuilder {
 
     /// Build the proxy
     pub fn build(self) -> Result<Proxy> {
-        let upstream = self.upstream.ok_or_else(|| {
-            Error::Config("Upstream agent not configured".to_string())
-        })?;
+        let upstream = self
+            .upstream
+            .ok_or_else(|| Error::Config("Upstream agent not configured".to_string()))?;
 
         Ok(Proxy::new(upstream, self.filter))
     }

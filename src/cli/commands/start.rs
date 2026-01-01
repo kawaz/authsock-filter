@@ -37,12 +37,8 @@ pub async fn execute(args: StartArgs) -> Result<()> {
 
     // Check if already running
     if pid_file.exists() {
-        let pid_str = fs::read_to_string(&pid_file)
-            .context("Failed to read PID file")?;
-        let pid: u32 = pid_str
-            .trim()
-            .parse()
-            .context("Invalid PID in file")?;
+        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
+        let pid: u32 = pid_str.trim().parse().context("Invalid PID in file")?;
 
         if is_process_running(pid) {
             bail!(
@@ -93,9 +89,7 @@ pub async fn execute(args: StartArgs) -> Result<()> {
         // Fork and exec
         // Note: In a real implementation, we would use fork() properly
         // For now, we spawn and detach
-        let child = cmd
-            .spawn()
-            .context("Failed to spawn daemon process")?;
+        let child = cmd.spawn().context("Failed to spawn daemon process")?;
 
         let pid = child.id();
 

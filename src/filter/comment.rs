@@ -41,9 +41,8 @@ impl CommentMatcher {
             MatchType::Regex(regex)
         } else if pattern.contains('*') || pattern.contains('?') {
             // Glob pattern
-            let glob = Glob::new(pattern).map_err(|e| {
-                Error::Filter(format!("Invalid glob pattern '{}': {}", pattern, e))
-            })?;
+            let glob = Glob::new(pattern)
+                .map_err(|e| Error::Filter(format!("Invalid glob pattern '{}': {}", pattern, e)))?;
             MatchType::Glob(glob.compile_matcher())
         } else {
             // Exact match

@@ -60,9 +60,9 @@ impl LogConfig {
     /// Get the minimum log level based on verbosity
     fn min_level(&self) -> Level {
         match self.verbosity {
-            v if v < 0 => Level::WARN,  // quiet: only warnings and errors
-            0 => Level::INFO,            // normal: info and above
-            _ => Level::DEBUG,           // verbose: debug and above
+            v if v < 0 => Level::WARN, // quiet: only warnings and errors
+            0 => Level::INFO,          // normal: info and above
+            _ => Level::DEBUG,         // verbose: debug and above
         }
     }
 }
@@ -78,7 +78,13 @@ impl LogConfig {
 /// When using JSONL output, this ensures the file is properly flushed.
 pub fn init(verbose: bool, quiet: bool) -> LogGuard {
     let config = LogConfig {
-        verbosity: if quiet { -1 } else if verbose { 1 } else { 0 },
+        verbosity: if quiet {
+            -1
+        } else if verbose {
+            1
+        } else {
+            0
+        },
         jsonl_path: None,
     };
     init_with_config(config)

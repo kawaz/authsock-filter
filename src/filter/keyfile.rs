@@ -41,9 +41,10 @@ impl KeyfileMatcher {
     /// Reload keys from the file
     pub fn reload(&self) -> Result<()> {
         let keys = Self::load_keys(&self.path)?;
-        let mut matchers = self.matchers.write().map_err(|e| {
-            Error::Filter(format!("Failed to acquire lock: {}", e))
-        })?;
+        let mut matchers = self
+            .matchers
+            .write()
+            .map_err(|e| Error::Filter(format!("Failed to acquire lock: {}", e)))?;
         *matchers = keys;
         Ok(())
     }
@@ -51,7 +52,11 @@ impl KeyfileMatcher {
     /// Load keys from a file
     fn load_keys(path: &Path) -> Result<Vec<PubkeyMatcher>> {
         let content = fs::read_to_string(path).map_err(|e| {
-            Error::Filter(format!("Failed to read keyfile '{}': {}", path.display(), e))
+            Error::Filter(format!(
+                "Failed to read keyfile '{}': {}",
+                path.display(),
+                e
+            ))
         })?;
 
         let mut matchers = Vec::new();

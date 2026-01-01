@@ -88,17 +88,23 @@ impl Identity {
 
     /// Get the fingerprint of this key
     pub fn fingerprint(&self) -> Option<Fingerprint> {
-        self.public_key.as_ref().map(|k| k.fingerprint(HashAlg::Sha256))
+        self.public_key
+            .as_ref()
+            .map(|k| k.fingerprint(HashAlg::Sha256))
     }
 
     /// Get the key type as a string
     pub fn key_type(&self) -> Option<String> {
-        self.public_key.as_ref().map(|k| k.algorithm().as_str().to_string())
+        self.public_key
+            .as_ref()
+            .map(|k| k.algorithm().as_str().to_string())
     }
 
     /// Get the key in OpenSSH format
     pub fn to_openssh(&self) -> Option<String> {
-        self.public_key.as_ref().map(|k| k.to_openssh().unwrap_or_default())
+        self.public_key
+            .as_ref()
+            .map(|k| k.to_openssh().unwrap_or_default())
     }
 }
 
@@ -153,7 +159,9 @@ impl AgentMessage {
         for _ in 0..count {
             // Read key blob
             if buf.remaining() < 4 {
-                return Err(Error::InvalidMessage("Unexpected end of message".to_string()));
+                return Err(Error::InvalidMessage(
+                    "Unexpected end of message".to_string(),
+                ));
             }
             let key_len = buf.get_u32() as usize;
             if buf.remaining() < key_len {
@@ -164,7 +172,9 @@ impl AgentMessage {
 
             // Read comment
             if buf.remaining() < 4 {
-                return Err(Error::InvalidMessage("Unexpected end of message".to_string()));
+                return Err(Error::InvalidMessage(
+                    "Unexpected end of message".to_string(),
+                ));
             }
             let comment_len = buf.get_u32() as usize;
             if buf.remaining() < comment_len {

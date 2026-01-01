@@ -328,10 +328,7 @@ impl JsonlWriter {
     ///
     /// Opens the file for appending. Creates the file if it doesn't exist.
     pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
 
         Ok(Self {
             writer: Mutex::new(BufWriter::new(file)),

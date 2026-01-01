@@ -41,7 +41,10 @@ pub async fn execute(args: StopArgs) -> Result<()> {
 
     // Check if PID file exists
     if !pid_file.exists() {
-        bail!("PID file not found: {}. Is the daemon running?", pid_file.display());
+        bail!(
+            "PID file not found: {}. Is the daemon running?",
+            pid_file.display()
+        );
     }
 
     // Read PID from file

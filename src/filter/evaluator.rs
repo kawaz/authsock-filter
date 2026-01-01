@@ -37,10 +37,7 @@ impl FilterEvaluator {
 
     /// Filter a list of identities
     pub fn filter_identities(&self, identities: Vec<Identity>) -> Vec<Identity> {
-        identities
-            .into_iter()
-            .filter(|i| self.matches(i))
-            .collect()
+        identities.into_iter().filter(|i| self.matches(i)).collect()
     }
 
     /// Get the number of rules

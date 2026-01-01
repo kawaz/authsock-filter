@@ -192,11 +192,14 @@ pub async fn execute(args: RegisterArgs) -> Result<()> {
             }
 
             // Generate and write plist
-            let plist_content =
-                generate_launchd_plist(&args.name, &exe_path, args.upstream.as_ref(), &args.sockets);
+            let plist_content = generate_launchd_plist(
+                &args.name,
+                &exe_path,
+                args.upstream.as_ref(),
+                &args.sockets,
+            );
 
-            fs::write(&plist_path, &plist_content)
-                .context("Failed to write launchd plist")?;
+            fs::write(&plist_path, &plist_content).context("Failed to write launchd plist")?;
 
             println!("Created launchd plist: {}", plist_path.display());
 
@@ -239,8 +242,7 @@ pub async fn execute(args: RegisterArgs) -> Result<()> {
             let unit_content =
                 generate_systemd_unit(&args.name, &exe_path, args.upstream.as_ref(), &args.sockets);
 
-            fs::write(&unit_path, &unit_content)
-                .context("Failed to write systemd unit file")?;
+            fs::write(&unit_path, &unit_content).context("Failed to write systemd unit file")?;
 
             println!("Created systemd unit: {}", unit_path.display());
 

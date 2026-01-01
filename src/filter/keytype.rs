@@ -63,7 +63,10 @@ mod tests {
         assert_eq!(KeyTypeMatcher::normalize("SSH-RSA"), "rsa");
         assert_eq!(KeyTypeMatcher::normalize("ecdsa-sha2-nistp256"), "ecdsa");
         assert_eq!(KeyTypeMatcher::normalize("ssh-dss"), "dsa");
-        assert_eq!(KeyTypeMatcher::normalize("sk-ssh-ed25519@openssh.com"), "sk-ed25519");
+        assert_eq!(
+            KeyTypeMatcher::normalize("sk-ssh-ed25519@openssh.com"),
+            "sk-ed25519"
+        );
     }
 
     #[test]

@@ -147,15 +147,13 @@ impl Launchd {
             .join("Library")
             .join("Logs")
             .join("authsock-filter");
-        fs::create_dir_all(&log_dir).map_err(|e| {
-            Error::Daemon(format!("Failed to create log directory: {}", e))
-        })?;
+        fs::create_dir_all(&log_dir)
+            .map_err(|e| Error::Daemon(format!("Failed to create log directory: {}", e)))?;
 
         // Generate and write plist
         let plist_content = self.generate_plist(args)?;
-        fs::write(&self.plist_path, &plist_content).map_err(|e| {
-            Error::Daemon(format!("Failed to write plist file: {}", e))
-        })?;
+        fs::write(&self.plist_path, &plist_content)
+            .map_err(|e| Error::Daemon(format!("Failed to write plist file: {}", e)))?;
 
         tracing::debug!(plist_path = %self.plist_path.display(), "Wrote plist file");
 
@@ -213,9 +211,8 @@ impl Launchd {
         }
 
         // Remove plist file
-        fs::remove_file(&self.plist_path).map_err(|e| {
-            Error::Daemon(format!("Failed to remove plist file: {}", e))
-        })?;
+        fs::remove_file(&self.plist_path)
+            .map_err(|e| Error::Daemon(format!("Failed to remove plist file: {}", e)))?;
 
         tracing::info!(
             label = %self.label,

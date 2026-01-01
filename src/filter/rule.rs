@@ -193,7 +193,10 @@ mod tests {
     #[test]
     fn test_parse_pubkey_auto() {
         // Use a valid ed25519 public key
-        let rule = FilterRule::parse("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test").unwrap();
+        let rule = FilterRule::parse(
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test",
+        )
+        .unwrap();
         assert!(!rule.negated);
         assert!(matches!(rule.filter, Filter::Pubkey(_)));
     }

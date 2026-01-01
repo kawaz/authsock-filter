@@ -20,9 +20,7 @@ async fn main() -> Result<()> {
         Commands::Config(args) => authsock_filter::cli::commands::config::execute(args).await?,
         Commands::Version => authsock_filter::cli::commands::version::execute().await?,
         Commands::Upgrade(args) => authsock_filter::cli::commands::upgrade::execute(args).await?,
-        Commands::Register(args) => {
-            authsock_filter::cli::commands::register::execute(args).await?
-        }
+        Commands::Register(args) => authsock_filter::cli::commands::register::execute(args).await?,
         Commands::Unregister(args) => {
             authsock_filter::cli::commands::unregister::execute(args).await?
         }

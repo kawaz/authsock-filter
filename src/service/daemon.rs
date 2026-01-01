@@ -97,16 +97,15 @@ impl Daemon {
         cmd.stderr(Stdio::null());
 
         // Spawn the process
-        let child = cmd.spawn().map_err(|e| {
-            Error::Daemon(format!("Failed to start daemon process: {}", e))
-        })?;
+        let child = cmd
+            .spawn()
+            .map_err(|e| Error::Daemon(format!("Failed to start daemon process: {}", e)))?;
 
         let pid = child.id();
 
         // Write PID file
-        fs::write(&self.pid_file, pid.to_string()).map_err(|e| {
-            Error::Daemon(format!("Failed to write PID file: {}", e))
-        })?;
+        fs::write(&self.pid_file, pid.to_string())
+            .map_err(|e| Error::Daemon(format!("Failed to write PID file: {}", e)))?;
 
         tracing::info!(pid = pid, pid_file = %self.pid_file.display(), "Daemon started");
 
@@ -127,9 +126,9 @@ impl Daemon {
             return Err(Error::Daemon("Daemon is not running".to_string()));
         }
 
-        let pid = status.pid.ok_or_else(|| {
-            Error::Daemon("No PID found".to_string())
-        })?;
+        let pid = status
+            .pid
+            .ok_or_else(|| Error::Daemon("No PID found".to_string()))?;
 
         // Send SIGTERM to the process
         Self::send_signal(pid, "TERM")?;
@@ -160,13 +159,13 @@ impl Daemon {
         }
 
         // Read PID from file
-        let pid_str = fs::read_to_string(&self.pid_file).map_err(|e| {
-            Error::Daemon(format!("Failed to read PID file: {}", e))
-        })?;
+        let pid_str = fs::read_to_string(&self.pid_file)
+            .map_err(|e| Error::Daemon(format!("Failed to read PID file: {}", e)))?;
 
-        let pid: u32 = pid_str.trim().parse().map_err(|e| {
-            Error::Daemon(format!("Invalid PID in file: {}", e))
-        })?;
+        let pid: u32 = pid_str
+            .trim()
+            .parse()
+            .map_err(|e| Error::Daemon(format!("Invalid PID in file: {}", e)))?;
 
         // Check if process is running
         let running = Self::is_process_running(pid);
@@ -207,7 +206,9 @@ impl Daemon {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(Error::Daemon(format!(
                 "Failed to send {} to process {}: {}",
-                signal, pid, stderr.trim()
+                signal,
+                pid,
+                stderr.trim()
             )));
         }
         Ok(())
@@ -228,9 +229,8 @@ impl Daemon {
 
         let status = self.status()?;
         if !status.running {
-            fs::remove_file(&self.pid_file).map_err(|e| {
-                Error::Daemon(format!("Failed to remove stale PID file: {}", e))
-            })?;
+            fs::remove_file(&self.pid_file)
+                .map_err(|e| Error::Daemon(format!("Failed to remove stale PID file: {}", e)))?;
             tracing::debug!(pid_file = %self.pid_file.display(), "Removed stale PID file");
             return Ok(true);
         }

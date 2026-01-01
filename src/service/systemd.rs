@@ -124,9 +124,8 @@ WantedBy=default.target
 
         // Generate and write unit file
         let unit_content = self.generate_unit(args)?;
-        fs::write(&self.unit_path, &unit_content).map_err(|e| {
-            Error::Daemon(format!("Failed to write unit file: {}", e))
-        })?;
+        fs::write(&self.unit_path, &unit_content)
+            .map_err(|e| Error::Daemon(format!("Failed to write unit file: {}", e)))?;
 
         tracing::debug!(unit_path = %self.unit_path.display(), "Wrote unit file");
 
@@ -211,9 +210,8 @@ WantedBy=default.target
         }
 
         // Remove unit file
-        fs::remove_file(&self.unit_path).map_err(|e| {
-            Error::Daemon(format!("Failed to remove unit file: {}", e))
-        })?;
+        fs::remove_file(&self.unit_path)
+            .map_err(|e| Error::Daemon(format!("Failed to remove unit file: {}", e)))?;
 
         // Reload systemd daemon
         let reload_output = Command::new("systemctl")

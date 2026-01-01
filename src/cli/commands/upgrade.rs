@@ -108,7 +108,10 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
         std::cmp::Ordering::Less => true,
         std::cmp::Ordering::Equal => {
             if args.force {
-                println!("Already at version {}, but --force specified.", latest_version);
+                println!(
+                    "Already at version {}, but --force specified.",
+                    latest_version
+                );
                 true
             } else {
                 println!("Already at the latest version.");
@@ -136,7 +139,10 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
         // Check only mode
         if needs_upgrade {
             println!();
-            println!("An update is available: {} -> {}", current_version, latest_version);
+            println!(
+                "An update is available: {} -> {}",
+                current_version, latest_version
+            );
             println!();
             println!("Release notes:");
             println!("{}", release.body);
@@ -217,7 +223,10 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
 
     println!();
     println!("[STUB] Download and installation not yet implemented.");
-    println!("Please download manually from: {}", asset.browser_download_url);
+    println!(
+        "Please download manually from: {}",
+        asset.browser_download_url
+    );
 
     Ok(())
 }
@@ -277,10 +286,7 @@ mod tests {
 
     #[test]
     fn test_compare_versions() {
-        assert_eq!(
-            compare_versions("0.1.0", "0.2.0"),
-            std::cmp::Ordering::Less
-        );
+        assert_eq!(compare_versions("0.1.0", "0.2.0"), std::cmp::Ordering::Less);
         assert_eq!(
             compare_versions("1.0.0", "0.9.9"),
             std::cmp::Ordering::Greater
