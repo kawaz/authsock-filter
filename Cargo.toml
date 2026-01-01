@@ -46,7 +46,7 @@ bytes = "1"
 futures = "0.3"
 
 # HTTP client for GitHub API
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Path utilities
 dirs = "5"
