@@ -6,7 +6,7 @@
 //! - JSONL file output for structured logging
 //! - Stderr output for human-readable logs
 
-mod jsonl;
+pub mod jsonl;
 
 pub use jsonl::{Decision, JsonlWriter, LogEvent, LogEventKind};
 

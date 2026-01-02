@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_single_rule() {
-        let evaluator = FilterEvaluator::parse(&["comment:test".to_string()]).unwrap();
+        let evaluator = FilterEvaluator::parse(&["comment=test".to_string()]).unwrap();
         assert!(evaluator.matches(&make_identity("test")));
         assert!(!evaluator.matches(&make_identity("other")));
     }
@@ -111,8 +111,8 @@ mod tests {
     #[test]
     fn test_multiple_rules_and() {
         let evaluator = FilterEvaluator::parse(&[
-            "comment:*@work*".to_string(),
-            "-comment:*@work.bad*".to_string(),
+            "comment=*@work*".to_string(),
+            "-comment=*@work.bad*".to_string(),
         ])
         .unwrap();
 
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_filter_identities() {
-        let evaluator = FilterEvaluator::parse(&["comment:*@work*".to_string()]).unwrap();
+        let evaluator = FilterEvaluator::parse(&["comment=*@work*".to_string()]).unwrap();
         let identities = vec![
             make_identity("user@work"),
             make_identity("user@home"),

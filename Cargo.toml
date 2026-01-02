@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "network-programming"]
 tokio = { version = "1", features = ["full", "signal"] }
 
 # SSH key handling
-ssh-key = { version = "0.6", features = ["std"] }
+ssh-key = { version = "0.6", features = ["std", "rand_core", "ed25519", "rsa"] }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
@@ -60,6 +60,7 @@ libc = "0.2"
 [dev-dependencies]
 tempfile = "3"
 tokio-test = "0.4"
+rand = "0.8"
 
 [[bin]]
 name = "authsock-filter"
