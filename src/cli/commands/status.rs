@@ -100,12 +100,11 @@ fn get_status(pid_file: &PathBuf) -> Result<StatusInfo> {
         // Try to get uptime from /proc on Linux
         #[cfg(target_os = "linux")]
         {
-            if let Ok(stat) = fs::metadata(format!("/proc/{}", pid)) {
-                if let Ok(created) = stat.created() {
-                    if let Ok(elapsed) = created.elapsed() {
-                        status.uptime_secs = Some(elapsed.as_secs());
-                    }
-                }
+            if let Ok(stat) = fs::metadata(format!("/proc/{}", pid))
+                && let Ok(created) = stat.created()
+                && let Ok(elapsed) = created.elapsed()
+            {
+                status.uptime_secs = Some(elapsed.as_secs());
             }
         }
 
