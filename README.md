@@ -49,6 +49,7 @@ Commands:
   upgrade     Upgrade to the latest version
   register    Register as OS service (launchd/systemd)
   unregister  Unregister OS service
+  completion  Generate shell completion scripts
 
 Options:
   -c, --config <PATH>  Configuration file path
@@ -189,6 +190,25 @@ authsock-filter unregister
 
 - `SIGTERM`, `SIGINT`: Graceful shutdown (cleanup sockets)
 - `SIGHUP`: Reload configuration and refresh GitHub/keyfile caches
+
+## Shell Completion
+
+Add to your shell configuration:
+
+```bash
+# Bash (~/.bashrc)
+source <(authsock-filter completion bash)
+
+# Zsh (~/.zshrc)
+source <(authsock-filter completion zsh)
+
+# Fish (~/.config/fish/config.fish)
+authsock-filter completion fish | source
+```
+
+## TODO
+
+- [ ] Register to mise registry for `mise use authsock-filter` support
 
 ## License
 
