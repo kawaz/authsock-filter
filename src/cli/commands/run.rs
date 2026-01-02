@@ -67,6 +67,12 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         let filter = FilterEvaluator::parse(&spec.filters)
             .context(format!("Failed to parse filters for socket {}", spec.path.display()))?;
 
+        // Ensure async filters are loaded (e.g., GitHub keys)
+        filter.ensure_loaded().await.context(format!(
+            "Failed to load filter data for socket {}",
+            spec.path.display()
+        ))?;
+
         let socket_path_str = spec.path.to_string_lossy().to_string();
 
         // Create proxy with optional logger
@@ -130,7 +136,10 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         handles.push(handle);
     }
 
-    info!("Proxy server started. Press Ctrl+C to stop.");
+    info!(
+        count = handles.len(),
+        "Proxy server started. Press Ctrl+C to stop."
+    );
 
     // Wait for shutdown signal
     signal::ctrl_c()
