@@ -1,42 +1,10 @@
 //! Run command - execute the proxy in the foreground
 
 use anyhow::{bail, Context, Result};
-use std::path::PathBuf;
 use tokio::signal;
 use tracing::{info, warn};
 
 use crate::cli::args::RunArgs;
-
-/// Socket specification parsed from command line
-#[derive(Debug, Clone)]
-pub struct SocketSpec {
-    /// Path to the socket file
-    pub path: PathBuf,
-    /// Filter specifications
-    pub filters: Vec<String>,
-}
-
-impl SocketSpec {
-    /// Parse a socket specification string
-    ///
-    /// Format: /path/to/socket.sock:filter1:filter2...
-    pub fn parse(spec: &str) -> Result<Self> {
-        let parts: Vec<&str> = spec.splitn(2, ':').collect();
-        let path = PathBuf::from(parts[0]);
-
-        let filters = if parts.len() > 1 {
-            parts[1]
-                .split(':')
-                .map(|s| s.to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        Ok(Self { path, filters })
-    }
-}
 
 /// Execute the run command
 pub async fn execute(args: RunArgs) -> Result<()> {
@@ -50,16 +18,11 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         bail!("Upstream socket does not exist: {}", upstream.display());
     }
 
-    // Parse socket specifications
-    let socket_specs: Vec<SocketSpec> = args
-        .sockets
-        .iter()
-        .map(|s| SocketSpec::parse(s))
-        .collect::<Result<Vec<_>>>()
-        .context("Failed to parse socket specifications")?;
+    // Parse socket specifications from --socket and --filter arguments
+    let socket_specs = args.parse_socket_specs();
 
     if socket_specs.is_empty() {
-        warn!("No socket specifications provided. Use -s/--socket to define filtered sockets.");
+        warn!("No socket specifications provided. Use --socket and --filter to define filtered sockets.");
     }
 
     info!(
@@ -109,28 +72,3 @@ pub async fn execute(args: RunArgs) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_socket_spec_parse_simple() {
-        let spec = SocketSpec::parse("/tmp/test.sock").unwrap();
-        assert_eq!(spec.path, PathBuf::from("/tmp/test.sock"));
-        assert!(spec.filters.is_empty());
-    }
-
-    #[test]
-    fn test_socket_spec_parse_with_filters() {
-        let spec = SocketSpec::parse("/tmp/test.sock:fingerprint:SHA256:xxx").unwrap();
-        assert_eq!(spec.path, PathBuf::from("/tmp/test.sock"));
-        assert_eq!(spec.filters, vec!["fingerprint", "SHA256", "xxx"]);
-    }
-
-    #[test]
-    fn test_socket_spec_parse_github_filter() {
-        let spec = SocketSpec::parse("/tmp/github.sock:github:kawaz").unwrap();
-        assert_eq!(spec.path, PathBuf::from("/tmp/github.sock"));
-        assert_eq!(spec.filters, vec!["github", "kawaz"]);
-    }
-}

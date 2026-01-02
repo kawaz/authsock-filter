@@ -28,7 +28,7 @@ Download the latest binary from [Releases](https://github.com/kawaz/authsock-fil
 
 ```bash
 # Create a filtered socket that only shows keys with "@work" in the comment
-authsock-filter run --socket /tmp/work.sock:comment:*@work*
+authsock-filter run --socket /tmp/work.sock comment=*@work*
 
 # Use the filtered socket
 SSH_AUTH_SOCK=/tmp/work.sock ssh user@work-server
@@ -64,34 +64,34 @@ Options:
 authsock-filter run [OPTIONS]
 
 Options:
-  --upstream <SOCKET>  Upstream agent socket [default: $SSH_AUTH_SOCK]
-  --log <PATH>         JSONL log output path
-  --socket <SPEC>      Socket definition (repeatable)
+  --upstream <SOCKET>        Upstream agent socket [default: $SSH_AUTH_SOCK]
+  --log <PATH>               JSONL log output path
+  --socket <PATH> [ARGS...]  Socket definition with inline filters
 ```
 
-### Socket Definition Format
+### Socket and Filter Format
 
-```
-/path/to/socket.sock:filter1:filter2:...
+Each `--socket` starts a new socket definition. Arguments after the path until the next `--socket` are filters:
+
+```bash
+authsock-filter run \
+  --socket /tmp/work.sock comment=*@work* type=ed25519 \
+  --socket /tmp/github.sock github=kawaz
 ```
 
-Multiple filters on the same socket are ANDed together.
+Filters use `type=value` format. Multiple filters on the same socket are ANDed together.
 
 ## Filter Types
 
-| Type | Syntax | Example |
-|------|--------|---------|
-| Fingerprint | `fingerprint:SHA256:xxx` | `fingerprint:SHA256:abc123...` |
-| Fingerprint (auto) | `SHA256:xxx` | `SHA256:abc123...` |
-| Public key | `pubkey:ssh-ed25519 AAAA...` | Full public key (comment ignored) |
-| Public key (auto) | `ssh-ed25519 AAAA...` | Auto-detected by key type prefix |
-| Keyfile | `keyfile:~/.ssh/allowed_keys` | Keys from authorized_keys format file |
-| Comment (exact) | `comment:user@host` | Exact match |
-| Comment (glob) | `comment:*@work*` | Glob pattern |
-| Comment (regex) | `comment:~@work\.example\.com$` | Regex with `~` prefix |
-| Key type | `type:ed25519` | `ed25519`, `rsa`, `ecdsa`, `dsa` |
-| GitHub user | `github:username` | Keys from github.com/username.keys |
-| Negation | `-<filter>` | `-type:dsa` (exclude DSA keys) |
+| Type | Syntax | Description |
+|------|--------|-------------|
+| Fingerprint | `fingerprint=SHA256:xxx` | Match by key fingerprint |
+| Comment | `comment=pattern` | Match by comment (glob or `~regex`) |
+| GitHub | `github=username` | Match keys from github.com/username.keys |
+| Key type | `type=ed25519` | Match by type: `ed25519`, `rsa`, `ecdsa`, `dsa` |
+| Public key | `pubkey=ssh-ed25519 AAAA...` | Match by full public key |
+| Keyfile | `keyfile=~/.ssh/allowed_keys` | Match keys from file |
+| Negation | `-type=value` | Prefix with `-` to exclude |
 
 ## Configuration File
 
@@ -131,30 +131,30 @@ timeout = "10s"
 ```bash
 # Create separate sockets for work and personal use
 authsock-filter run \
-  --socket ~/.ssh/work.sock:comment:*@work.example.com \
-  --socket ~/.ssh/personal.sock:-comment:*@work.example.com
+  --socket ~/.ssh/work.sock comment=*@work.example.com \
+  --socket ~/.ssh/personal.sock -comment=*@work.example.com
 ```
 
 ### Only Modern Keys
 
 ```bash
 # Only allow ed25519 keys
-authsock-filter run --socket /tmp/modern.sock:type:ed25519:-type:dsa:-type:rsa
+authsock-filter run \
+  --socket /tmp/modern.sock type=ed25519 -type=dsa -type=rsa
 ```
 
 ### GitHub Authorized Keys
 
 ```bash
 # Only allow keys registered with your GitHub account
-authsock-filter run --socket /tmp/github.sock:github:kawaz
+authsock-filter run --socket /tmp/github.sock github=kawaz
 ```
 
 ### Combining Filters
 
 ```bash
 # Work keys that are also ed25519
-authsock-filter run \
-  --socket /tmp/work-ed25519.sock:comment:*@work*:type:ed25519
+authsock-filter run --socket /tmp/work-ed25519.sock comment=*@work* type=ed25519
 ```
 
 ## Environment Variables
@@ -210,7 +210,9 @@ authsock-filter completion fish | source
 
 - [x] Dynamic shell completion using `CompleteEnv` (clap_complete unstable-dynamic)
   - Binary-as-completion-engine for minimal shell memory footprint
-  - Custom completion for `-s` socket spec (path:filter_type:...)
+- [ ] Custom completion for `--socket` inline filters
+- [ ] Socket-specific options (`--logging`, `--mode`, etc.)
+- [ ] Unify config file filter format with CLI (`type=value` style)
 - [ ] Register to mise registry for `mise use authsock-filter` support
 
 ## License

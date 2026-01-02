@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use tracing::info;
 
-use crate::cli::args::RegisterArgs;
+use crate::cli::args::{RegisterArgs, SocketSpec};
 
 /// Service manager type
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -61,7 +61,7 @@ fn generate_launchd_plist(
     name: &str,
     exe_path: &str,
     upstream: Option<&PathBuf>,
-    sockets: &[String],
+    socket_specs: &[SocketSpec],
 ) -> String {
     let mut args = vec![exe_path.to_string(), "run".to_string()];
 
@@ -70,9 +70,13 @@ fn generate_launchd_plist(
         args.push(up.display().to_string());
     }
 
-    for socket in sockets {
+    for spec in socket_specs {
         args.push("--socket".to_string());
-        args.push(socket.clone());
+        args.push(spec.path.display().to_string());
+        for filter in &spec.filters {
+            args.push("--filter".to_string());
+            args.push(filter.clone());
+        }
     }
 
     let args_xml: String = args
@@ -124,7 +128,7 @@ fn generate_systemd_unit(
     _name: &str,
     exe_path: &str,
     upstream: Option<&PathBuf>,
-    sockets: &[String],
+    socket_specs: &[SocketSpec],
 ) -> String {
     let mut exec_start = format!("{} run", exe_path);
 
@@ -132,8 +136,11 @@ fn generate_systemd_unit(
         exec_start.push_str(&format!(" --upstream {}", up.display()));
     }
 
-    for socket in sockets {
-        exec_start.push_str(&format!(" --socket {}", socket));
+    for spec in socket_specs {
+        exec_start.push_str(&format!(" --socket {}", spec.path.display()));
+        for filter in &spec.filters {
+            exec_start.push_str(&format!(" --filter {}", filter));
+        }
     }
 
     format!(
@@ -192,11 +199,12 @@ pub async fn execute(args: RegisterArgs) -> Result<()> {
             }
 
             // Generate and write plist
+            let socket_specs = args.parse_socket_specs();
             let plist_content = generate_launchd_plist(
                 &args.name,
                 &exe_path,
                 args.upstream.as_ref(),
-                &args.sockets,
+                &socket_specs,
             );
 
             fs::write(&plist_path, &plist_content).context("Failed to write launchd plist")?;
@@ -239,8 +247,9 @@ pub async fn execute(args: RegisterArgs) -> Result<()> {
             }
 
             // Generate and write unit file
+            let socket_specs = args.parse_socket_specs();
             let unit_content =
-                generate_systemd_unit(&args.name, &exe_path, args.upstream.as_ref(), &args.sockets);
+                generate_systemd_unit(&args.name, &exe_path, args.upstream.as_ref(), &socket_specs);
 
             fs::write(&unit_path, &unit_content).context("Failed to write systemd unit file")?;
 

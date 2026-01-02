@@ -33,6 +33,8 @@ fn is_process_running(pid: u32) -> bool {
 
 /// Execute the start command
 pub async fn execute(args: StartArgs) -> Result<()> {
+    // Parse socket specs before moving args fields
+    let socket_specs = args.parse_socket_specs();
     let pid_file = args.pid_file.unwrap_or_else(default_pid_file);
 
     // Check if already running
@@ -74,8 +76,12 @@ pub async fn execute(args: StartArgs) -> Result<()> {
         cmd.arg("--log").arg(log);
     }
 
-    for socket in &args.sockets {
-        cmd.arg("--socket").arg(socket);
+    // Pass socket and filter arguments
+    for spec in &socket_specs {
+        cmd.arg("--socket").arg(&spec.path);
+        for filter in &spec.filters {
+            cmd.arg("--filter").arg(filter);
+        }
     }
 
     // Daemonize the process

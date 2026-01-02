@@ -1,10 +1,15 @@
 //! Argument structures for CLI commands
 
 use clap::Args;
-use clap_complete::engine::{ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter};
 use clap_complete::Shell;
-use std::ffi::OsStr;
 use std::path::PathBuf;
+
+/// Parsed socket configuration from CLI arguments
+#[derive(Debug, Clone, Default)]
+pub struct SocketSpec {
+    pub path: PathBuf,
+    pub filters: Vec<String>,
+}
 
 /// Arguments for the `run` command
 #[derive(Args, Debug, Clone)]
@@ -19,19 +24,31 @@ pub struct RunArgs {
     #[arg(long)]
     pub log: Option<PathBuf>,
 
-    /// Socket definitions (repeatable)
+    /// Socket definition with filters and options
     ///
-    /// Format: /path/to/socket.sock:filter1:filter2...
+    /// Format: --socket PATH [FILTERS...] [OPTIONS...]
+    ///
+    /// Arguments after PATH until the next --socket are associated with this socket:
+    ///   - Filters: type=value (e.g., comment=*@work*, github=kawaz, -type=dsa)
+    ///   - Options: --logging true, --mode 0666, etc.
     ///
     /// Examples:
-    ///   --socket /tmp/filtered.sock:fingerprint:SHA256:xxx
-    ///   --socket /tmp/github.sock:github:kawaz
-    #[arg(long = "socket", value_name = "SPEC", add = ArgValueCompleter::new(socket_spec_completer))]
-    pub sockets: Vec<String>,
+    ///   --socket /tmp/work.sock comment=*@work* type=ed25519
+    ///   --socket /tmp/github.sock github=kawaz --logging true
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]")]
+    pub socket: Vec<String>,
 
     /// Foreground mode (don't daemonize) - always true for `run`
     #[arg(long, hide = true, default_value = "true")]
     pub foreground: bool,
+}
+
+impl RunArgs {
+    /// Parse socket and filter arguments into SocketSpecs
+    /// Filters are associated with the preceding socket
+    pub fn parse_socket_specs(&self) -> Vec<SocketSpec> {
+        parse_socket_specs_from_args()
+    }
 }
 
 /// Arguments for the `start` command
@@ -45,13 +62,20 @@ pub struct StartArgs {
     #[arg(long)]
     pub log: Option<PathBuf>,
 
-    /// Socket definitions (repeatable)
-    #[arg(long = "socket", value_name = "SPEC", add = ArgValueCompleter::new(socket_spec_completer))]
-    pub sockets: Vec<String>,
+    /// Socket definition with filters and options
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]")]
+    pub socket: Vec<String>,
 
     /// PID file path
     #[arg(long)]
     pub pid_file: Option<PathBuf>,
+}
+
+impl StartArgs {
+    /// Parse socket and filter arguments into SocketSpecs
+    pub fn parse_socket_specs(&self) -> Vec<SocketSpec> {
+        parse_socket_specs_from_args()
+    }
 }
 
 /// Arguments for the `stop` command
@@ -133,9 +157,16 @@ pub struct RegisterArgs {
     #[arg(long)]
     pub upstream: Option<PathBuf>,
 
-    /// Socket definitions for service
-    #[arg(long = "socket", value_name = "SPEC", add = ArgValueCompleter::new(socket_spec_completer))]
-    pub sockets: Vec<String>,
+    /// Socket definition with filters and options
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]")]
+    pub socket: Vec<String>,
+}
+
+impl RegisterArgs {
+    /// Parse socket and filter arguments into SocketSpecs
+    pub fn parse_socket_specs(&self) -> Vec<SocketSpec> {
+        parse_socket_specs_from_args()
+    }
 }
 
 /// Arguments for the `unregister` command
@@ -158,47 +189,71 @@ pub struct CompletionArgs {
     pub shell: Shell,
 }
 
-/// Filter types for socket spec completion
-const FILTER_TYPES: &[(&str, &str)] = &[
-    ("fingerprint:", "Filter by key fingerprint (SHA256:...)"),
-    ("comment:", "Filter by key comment (glob/regex)"),
-    ("github:", "Filter by GitHub username's keys"),
-    ("type:", "Filter by key type (ed25519/rsa/ecdsa/dsa)"),
-    ("pubkey:", "Filter by public key"),
-    ("keyfile:", "Filter by keys in authorized_keys file"),
-    ("-fingerprint:", "Exclude by fingerprint"),
-    ("-comment:", "Exclude by comment"),
-    ("-github:", "Exclude GitHub user's keys"),
-    ("-type:", "Exclude by key type"),
-    ("-pubkey:", "Exclude by public key"),
-    ("-keyfile:", "Exclude keys in file"),
-];
-
-/// Custom completer for socket spec (-s option)
+/// Parse socket specs from command line arguments
 ///
-/// Completes:
-/// - Path when no `:` present
-/// - Filter types after `path:`
-fn socket_spec_completer(current: &OsStr) -> Vec<CompletionCandidate> {
-    let Some(current_str) = current.to_str() else {
-        return vec![];
-    };
+/// New format: --socket PATH [FILTERS...] [OPTIONS...]
+/// Arguments after PATH until the next --socket belong to this socket
+pub fn parse_socket_specs_from_args() -> Vec<SocketSpec> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut specs: Vec<SocketSpec> = Vec::new();
+    let mut current_socket: Option<SocketSpec> = None;
 
-    // Find the last `:` to determine context
-    if let Some(colon_pos) = current_str.rfind(':') {
-        let prefix = &current_str[..=colon_pos];
-        let partial = &current_str[colon_pos + 1..];
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        if arg == "--socket" || arg.starts_with("--socket=") {
+            // Save previous socket if any
+            if let Some(spec) = current_socket.take() {
+                specs.push(spec);
+            }
 
-        // After a colon, suggest filter types
-        FILTER_TYPES
-            .iter()
-            .filter(|(name, _)| name.starts_with(partial))
-            .map(|(name, help)| {
-                CompletionCandidate::new(format!("{}{}", prefix, name)).help(Some((*help).into()))
-            })
-            .collect()
-    } else {
-        // No colon yet - complete as file path
-        PathCompleter::any().complete(current)
+            // Get socket path
+            let path = if arg == "--socket" {
+                iter.next().map(|s| s.as_str())
+            } else {
+                arg.strip_prefix("--socket=")
+            };
+
+            if let Some(path) = path {
+                current_socket = Some(SocketSpec {
+                    path: PathBuf::from(path),
+                    filters: Vec::new(),
+                });
+            }
+        } else if let Some(ref mut spec) = current_socket {
+            // Arguments after --socket PATH belong to this socket
+            // Skip known global options
+            if arg.starts_with("--upstream")
+                || arg.starts_with("--log")
+                || arg.starts_with("--config")
+                || arg.starts_with("--verbose")
+                || arg.starts_with("--quiet")
+                || arg.starts_with("--pid-file")
+                || arg == "-h"
+                || arg == "--help"
+                || arg == "-V"
+                || arg == "--version"
+            {
+                // Skip global option and its value if needed
+                if arg == "--upstream" || arg == "--log" || arg == "--config" || arg == "--pid-file"
+                {
+                    iter.next(); // skip value
+                }
+                continue;
+            }
+
+            // Check if it's a filter (contains '=' and doesn't start with --)
+            // or starts with - for negation filters
+            if !arg.starts_with("--") {
+                spec.filters.push(arg.clone());
+            }
+            // TODO: Handle socket-specific options like --logging, --mode
+        }
     }
+
+    // Save last socket
+    if let Some(spec) = current_socket {
+        specs.push(spec);
+    }
+
+    specs
 }
