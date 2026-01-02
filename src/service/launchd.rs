@@ -318,12 +318,16 @@ mod tests {
     #[test]
     fn test_default_plist_path() {
         let plist_path = Launchd::default_plist_path();
-        assert!(plist_path
-            .to_string_lossy()
-            .contains("Library/LaunchAgents"));
-        assert!(plist_path
-            .to_string_lossy()
-            .ends_with("com.github.kawaz.authsock-filter.plist"));
+        assert!(
+            plist_path
+                .to_string_lossy()
+                .contains("Library/LaunchAgents")
+        );
+        assert!(
+            plist_path
+                .to_string_lossy()
+                .ends_with("com.github.kawaz.authsock-filter.plist")
+        );
     }
 
     #[test]

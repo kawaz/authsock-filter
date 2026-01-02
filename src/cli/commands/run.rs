@@ -1,6 +1,6 @@
 //! Run command - execute the proxy in the foreground
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::signal;
@@ -17,7 +17,9 @@ pub async fn execute(args: RunArgs) -> Result<()> {
     let upstream_groups = args.parse_upstream_groups();
 
     if upstream_groups.is_empty() {
-        bail!("No upstream groups configured. Use --upstream and --socket to define proxy configuration.");
+        bail!(
+            "No upstream groups configured. Use --upstream and --socket to define proxy configuration."
+        );
     }
 
     // Count total sockets
@@ -70,8 +72,10 @@ pub async fn execute(args: RunArgs) -> Result<()> {
 
         for spec in &group.sockets {
             // Parse filters
-            let filter = FilterEvaluator::parse(&spec.filters)
-                .context(format!("Failed to parse filters for socket {}", spec.path.display()))?;
+            let filter = FilterEvaluator::parse(&spec.filters).context(format!(
+                "Failed to parse filters for socket {}",
+                spec.path.display()
+            ))?;
 
             // Ensure async filters are loaded (e.g., GitHub keys)
             filter.ensure_loaded().await.context(format!(
@@ -98,8 +102,10 @@ pub async fn execute(args: RunArgs) -> Result<()> {
             // Remove existing socket if present
             if spec.path.exists() {
                 debug!(path = %spec.path.display(), "Removing existing socket file");
-                std::fs::remove_file(&spec.path)
-                    .context(format!("Failed to remove existing socket at {}", spec.path.display()))?;
+                std::fs::remove_file(&spec.path).context(format!(
+                    "Failed to remove existing socket at {}",
+                    spec.path.display()
+                ))?;
             }
 
             // Ensure parent directory exists

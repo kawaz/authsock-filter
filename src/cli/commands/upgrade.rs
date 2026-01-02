@@ -1,6 +1,6 @@
 //! Upgrade command - upgrade to the latest version from GitHub
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use tracing::info;
 

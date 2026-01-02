@@ -1,6 +1,6 @@
 //! Stop command - stop the running daemon
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;

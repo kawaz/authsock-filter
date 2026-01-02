@@ -35,7 +35,10 @@ fn test_filter_exclude_key_type() {
 
     let evaluator = FilterEvaluator::parse(&["-type=ed25519".to_string()]).unwrap();
 
-    assert!(!evaluator.matches(&ed25519_key), "ed25519 key should be excluded");
+    assert!(
+        !evaluator.matches(&ed25519_key),
+        "ed25519 key should be excluded"
+    );
 }
 
 #[test]
@@ -46,7 +49,10 @@ fn test_filter_by_comment_glob() {
     let evaluator = FilterEvaluator::parse(&["comment=*@work*".to_string()]).unwrap();
 
     assert!(evaluator.matches(&work_key), "work key should match");
-    assert!(!evaluator.matches(&personal_key), "personal key should not match");
+    assert!(
+        !evaluator.matches(&personal_key),
+        "personal key should not match"
+    );
 }
 
 #[test]
@@ -57,7 +63,10 @@ fn test_filter_by_comment_regex() {
     let evaluator = FilterEvaluator::parse(&["comment=~@work\\.".to_string()]).unwrap();
 
     assert!(evaluator.matches(&work_key), "work key should match regex");
-    assert!(!evaluator.matches(&personal_key), "personal key should not match regex");
+    assert!(
+        !evaluator.matches(&personal_key),
+        "personal key should not match regex"
+    );
 }
 
 #[test]
@@ -68,7 +77,10 @@ fn test_filter_exclude_comment() {
     let evaluator = FilterEvaluator::parse(&["-comment=*@work*".to_string()]).unwrap();
 
     assert!(!evaluator.matches(&work_key), "work key should be excluded");
-    assert!(evaluator.matches(&personal_key), "personal key should match");
+    assert!(
+        evaluator.matches(&personal_key),
+        "personal key should match"
+    );
 }
 
 #[test]
@@ -76,11 +88,9 @@ fn test_filter_multiple_rules_and() {
     let ed25519_work = make_identity_from_str(ED25519_KEY_1);
     let ed25519_personal = make_identity_from_str(ED25519_KEY_2);
 
-    let evaluator = FilterEvaluator::parse(&[
-        "type=ed25519".to_string(),
-        "comment=*@work*".to_string(),
-    ])
-    .unwrap();
+    let evaluator =
+        FilterEvaluator::parse(&["type=ed25519".to_string(), "comment=*@work*".to_string()])
+            .unwrap();
 
     assert!(
         evaluator.matches(&ed25519_work),
@@ -101,7 +111,10 @@ fn test_filter_fingerprint() {
     let fingerprint_str = format!("fingerprint={}", fingerprint);
 
     let evaluator = FilterEvaluator::parse(&[fingerprint_str]).unwrap();
-    assert!(evaluator.matches(&identity), "key should match its own fingerprint");
+    assert!(
+        evaluator.matches(&identity),
+        "key should match its own fingerprint"
+    );
 
     // Different key should not match
     let other_identity = make_identity_from_str(ED25519_KEY_2);
@@ -120,7 +133,10 @@ fn test_filter_fingerprint_auto_detect() {
     let fingerprint_str = fingerprint.to_string();
 
     let evaluator = FilterEvaluator::parse(&[fingerprint_str]).unwrap();
-    assert!(evaluator.matches(&identity), "key should match auto-detected fingerprint");
+    assert!(
+        evaluator.matches(&identity),
+        "key should match auto-detected fingerprint"
+    );
 }
 
 #[test]
@@ -153,10 +169,17 @@ fn test_filter_pubkey_auto_detect() {
     let identity = make_identity_from_str(ED25519_KEY_1);
 
     // Auto-detect pubkey format (ssh-ed25519 ...)
-    let pubkey_str = ED25519_KEY_1.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+    let pubkey_str = ED25519_KEY_1
+        .split_whitespace()
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(" ");
     let evaluator = FilterEvaluator::parse(&[pubkey_str]).unwrap();
 
-    assert!(evaluator.matches(&identity), "key should match auto-detected pubkey");
+    assert!(
+        evaluator.matches(&identity),
+        "key should match auto-detected pubkey"
+    );
 
     let other_identity = make_identity_from_str(ED25519_KEY_2);
     assert!(
@@ -170,27 +193,32 @@ fn test_filter_pubkey_explicit() {
     let identity = make_identity_from_str(ED25519_KEY_1);
 
     // Explicit pubkey= prefix
-    let pubkey_str = ED25519_KEY_1.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+    let pubkey_str = ED25519_KEY_1
+        .split_whitespace()
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(" ");
     let filter_str = format!("pubkey={}", pubkey_str);
     let evaluator = FilterEvaluator::parse(&[filter_str]).unwrap();
 
-    assert!(evaluator.matches(&identity), "key should match explicit pubkey");
+    assert!(
+        evaluator.matches(&identity),
+        "key should match explicit pubkey"
+    );
 }
 
 #[test]
 fn test_filter_identities_list() {
     let keys = vec![
-        make_identity_from_str(ED25519_KEY_1),  // work ed25519
-        make_identity_from_str(ED25519_KEY_2),  // personal ed25519
-        make_identity_from_str(ED25519_KEY_3),  // work ed25519
+        make_identity_from_str(ED25519_KEY_1), // work ed25519
+        make_identity_from_str(ED25519_KEY_2), // personal ed25519
+        make_identity_from_str(ED25519_KEY_3), // work ed25519
     ];
 
     // Filter: ed25519 keys with work comment
-    let evaluator = FilterEvaluator::parse(&[
-        "type=ed25519".to_string(),
-        "comment=*@work*".to_string(),
-    ])
-    .unwrap();
+    let evaluator =
+        FilterEvaluator::parse(&["type=ed25519".to_string(), "comment=*@work*".to_string()])
+            .unwrap();
 
     let filtered = evaluator.filter_identities(keys);
     assert_eq!(filtered.len(), 2, "should have 2 work ed25519 keys");
@@ -218,11 +246,9 @@ fn test_complex_filter_scenario() {
     let work_ed25519_2 = make_identity_from_str(ED25519_KEY_3);
 
     // Filter: ed25519 AND work comment
-    let evaluator = FilterEvaluator::parse(&[
-        "type=ed25519".to_string(),
-        "comment=*@work*".to_string(),
-    ])
-    .unwrap();
+    let evaluator =
+        FilterEvaluator::parse(&["type=ed25519".to_string(), "comment=*@work*".to_string()])
+            .unwrap();
 
     assert!(evaluator.matches(&work_ed25519));
     assert!(!evaluator.matches(&personal_ed25519));
@@ -242,7 +268,10 @@ fn test_filter_multiple_negations() {
     .unwrap();
 
     assert!(!evaluator.matches(&work_key), "work key should be excluded");
-    assert!(!evaluator.matches(&personal_key), "personal key should be excluded");
+    assert!(
+        !evaluator.matches(&personal_key),
+        "personal key should be excluded"
+    );
 }
 
 #[test]
@@ -254,8 +283,12 @@ fn test_filter_comment_exact_match() {
     assert!(evaluator.matches(&key), "should match exact comment");
 
     // Non-matching exact
-    let evaluator2 = FilterEvaluator::parse(&["comment=other@work.example.com".to_string()]).unwrap();
-    assert!(!evaluator2.matches(&key), "should not match different comment");
+    let evaluator2 =
+        FilterEvaluator::parse(&["comment=other@work.example.com".to_string()]).unwrap();
+    assert!(
+        !evaluator2.matches(&key),
+        "should not match different comment"
+    );
 }
 
 #[test]

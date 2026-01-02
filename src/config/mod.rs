@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub use file::{find_config_file, load_config, ConfigFile};
+pub use file::{ConfigFile, find_config_file, load_config};
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,7 +196,7 @@ pub fn parse_duration(s: &str) -> crate::Result<std::time::Duration> {
             return Err(crate::Error::Config(format!(
                 "Unknown duration unit '{}' in '{}'",
                 unit, s
-            )))
+            )));
         }
     };
 

@@ -1,6 +1,6 @@
 //! Start command - start the proxy as a background daemon
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -55,7 +55,9 @@ pub async fn execute(args: StartArgs) -> Result<()> {
 
     // Validate upstream groups
     if upstream_groups.is_empty() {
-        bail!("No upstream groups configured. Use --upstream and --socket to define proxy configuration.");
+        bail!(
+            "No upstream groups configured. Use --upstream and --socket to define proxy configuration."
+        );
     }
 
     for group in &upstream_groups {

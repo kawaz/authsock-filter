@@ -1,6 +1,6 @@
 //! Register command - register as an OS service
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::PathBuf;
 use tracing::info;
@@ -57,11 +57,7 @@ fn systemd_unit_path(name: &str) -> PathBuf {
 }
 
 /// Generate launchd plist content
-fn generate_launchd_plist(
-    name: &str,
-    exe_path: &str,
-    upstream_groups: &[UpstreamGroup],
-) -> String {
+fn generate_launchd_plist(name: &str, exe_path: &str, upstream_groups: &[UpstreamGroup]) -> String {
     let mut args = vec![exe_path.to_string(), "run".to_string()];
 
     for group in upstream_groups {
@@ -121,11 +117,7 @@ fn generate_launchd_plist(
 }
 
 /// Generate systemd unit content
-fn generate_systemd_unit(
-    _name: &str,
-    exe_path: &str,
-    upstream_groups: &[UpstreamGroup],
-) -> String {
+fn generate_systemd_unit(_name: &str, exe_path: &str, upstream_groups: &[UpstreamGroup]) -> String {
     let mut exec_start = format!("{} run", exe_path);
 
     for group in upstream_groups {
@@ -195,11 +187,7 @@ pub async fn execute(args: RegisterArgs) -> Result<()> {
 
             // Generate and write plist
             let upstream_groups = args.parse_upstream_groups();
-            let plist_content = generate_launchd_plist(
-                &args.name,
-                &exe_path,
-                &upstream_groups,
-            );
+            let plist_content = generate_launchd_plist(&args.name, &exe_path, &upstream_groups);
 
             fs::write(&plist_path, &plist_content).context("Failed to write launchd plist")?;
 
@@ -242,8 +230,7 @@ pub async fn execute(args: RegisterArgs) -> Result<()> {
 
             // Generate and write unit file
             let upstream_groups = args.parse_upstream_groups();
-            let unit_content =
-                generate_systemd_unit(&args.name, &exe_path, &upstream_groups);
+            let unit_content = generate_systemd_unit(&args.name, &exe_path, &upstream_groups);
 
             fs::write(&unit_path, &unit_content).context("Failed to write systemd unit file")?;
 

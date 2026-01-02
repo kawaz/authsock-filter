@@ -1,8 +1,8 @@
 //! Argument structures for CLI commands
 
 use clap::Args;
-use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use clap_complete::Shell;
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use std::path::PathBuf;
 
 /// Parsed socket configuration from CLI arguments
@@ -395,7 +395,10 @@ fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
             return complete_path(path_prefix)
                 .into_iter()
                 .map(|c| {
-                    CompletionCandidate::new(format!("-keyfile={}", c.get_value().to_string_lossy()))
+                    CompletionCandidate::new(format!(
+                        "-keyfile={}",
+                        c.get_value().to_string_lossy()
+                    ))
                 })
                 .collect();
         }
@@ -465,9 +468,7 @@ fn complete_path(current: &str) -> Vec<CompletionCandidate> {
     } else {
         (
             path.parent().unwrap_or(Path::new(".")).to_path_buf(),
-            path.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(""),
+            path.file_name().and_then(|s| s.to_str()).unwrap_or(""),
         )
     };
 

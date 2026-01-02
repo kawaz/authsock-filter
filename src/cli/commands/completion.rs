@@ -5,8 +5,8 @@ use clap::CommandFactory;
 use clap_complete::generate;
 use std::io;
 
-use crate::cli::args::CompletionArgs;
 use crate::cli::Cli;
+use crate::cli::args::CompletionArgs;
 
 /// Execute the completion command
 pub async fn execute(args: CompletionArgs) -> Result<()> {

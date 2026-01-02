@@ -336,9 +336,11 @@ mod tests {
     fn test_default_unit_path() {
         let unit_path = Systemd::default_unit_path();
         assert!(unit_path.to_string_lossy().contains("systemd/user"));
-        assert!(unit_path
-            .to_string_lossy()
-            .ends_with("authsock-filter.service"));
+        assert!(
+            unit_path
+                .to_string_lossy()
+                .ends_with("authsock-filter.service")
+        );
     }
 
     #[test]

@@ -68,11 +68,7 @@ impl FilterRule {
     /// Check if this rule matches the given identity
     pub fn matches(&self, identity: &Identity) -> bool {
         let result = self.filter.matches(identity);
-        if self.negated {
-            !result
-        } else {
-            result
-        }
+        if self.negated { !result } else { result }
     }
 
     /// Parse a filter rule from a string

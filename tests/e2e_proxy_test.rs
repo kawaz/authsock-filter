@@ -61,10 +61,7 @@ async fn start_mock_agent(socket_path: &std::path::Path, identities: Vec<Identit
 }
 
 /// Start a proxy server
-async fn start_proxy_server(
-    socket_path: &std::path::Path,
-    proxy: Arc<Proxy>,
-) {
+async fn start_proxy_server(socket_path: &std::path::Path, proxy: Arc<Proxy>) {
     let listener = UnixListener::bind(socket_path).unwrap();
 
     tokio::spawn(async move {
@@ -128,7 +125,11 @@ async fn test_proxy_filters_by_comment() {
 
     // Verify only work keys are returned
     assert_eq!(filtered_identities.len(), 2, "should have 2 work keys");
-    assert!(filtered_identities.iter().all(|i| i.comment.contains("@work")));
+    assert!(
+        filtered_identities
+            .iter()
+            .all(|i| i.comment.contains("@work"))
+    );
 }
 
 #[tokio::test]
@@ -211,11 +212,9 @@ async fn test_proxy_filters_multiple_rules() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: work keys but not dev
-    let filter = FilterEvaluator::parse(&[
-        "comment=*@work*".to_string(),
-        "-comment=dev@*".to_string(),
-    ])
-    .unwrap();
+    let filter =
+        FilterEvaluator::parse(&["comment=*@work*".to_string(), "-comment=dev@*".to_string()])
+            .unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
@@ -322,5 +321,9 @@ async fn test_proxy_excludes_by_key_type() {
     let filtered_identities = request_identities(&proxy_path).await;
 
     // Verify no keys pass
-    assert_eq!(filtered_identities.len(), 0, "should have 0 keys (all excluded)");
+    assert_eq!(
+        filtered_identities.len(),
+        0,
+        "should have 0 keys (all excluded)"
+    );
 }

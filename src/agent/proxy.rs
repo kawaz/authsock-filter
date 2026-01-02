@@ -8,8 +8,8 @@ use crate::filter::FilterEvaluator;
 use crate::logging::jsonl::{Decision, JsonlWriter, LogEvent};
 use crate::protocol::{AgentCodec, AgentMessage, Identity, MessageType};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::net::UnixStream;
 use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
@@ -102,14 +102,23 @@ impl Proxy {
 
         self.log(LogEvent::client_connect(&self.socket_path, &client_id_str));
 
-        let result = self.handle_client_inner(&mut client_stream, &client_id_str).await;
+        let result = self
+            .handle_client_inner(&mut client_stream, &client_id_str)
+            .await;
 
-        self.log(LogEvent::client_disconnect(&self.socket_path, &client_id_str));
+        self.log(LogEvent::client_disconnect(
+            &self.socket_path,
+            &client_id_str,
+        ));
 
         result
     }
 
-    async fn handle_client_inner(&self, client_stream: &mut UnixStream, client_id: &str) -> Result<()> {
+    async fn handle_client_inner(
+        &self,
+        client_stream: &mut UnixStream,
+        client_id: &str,
+    ) -> Result<()> {
         let (mut client_reader, mut client_writer) = client_stream.split();
 
         loop {
@@ -135,9 +144,15 @@ impl Proxy {
     }
 
     /// Process a single request from the client
-    async fn process_request(&self, request: AgentMessage, client_id: &str) -> Result<AgentMessage> {
+    async fn process_request(
+        &self,
+        request: AgentMessage,
+        client_id: &str,
+    ) -> Result<AgentMessage> {
         match request.msg_type {
-            MessageType::RequestIdentities => self.handle_request_identities(request, client_id).await,
+            MessageType::RequestIdentities => {
+                self.handle_request_identities(request, client_id).await
+            }
             MessageType::SignRequest => self.handle_sign_request(request, client_id).await,
             _ => {
                 // Pass through other messages
@@ -150,7 +165,11 @@ impl Proxy {
     ///
     /// Forwards the request to upstream, then filters the response
     /// to only include keys that match the filter rules.
-    async fn handle_request_identities(&self, request: AgentMessage, client_id: &str) -> Result<AgentMessage> {
+    async fn handle_request_identities(
+        &self,
+        request: AgentMessage,
+        client_id: &str,
+    ) -> Result<AgentMessage> {
         debug!("Handling REQUEST_IDENTITIES");
 
         // Forward to upstream
@@ -185,15 +204,20 @@ impl Proxy {
                 self.log(
                     LogEvent::key_allowed(&self.socket_path, &fingerprint, &id.comment)
                         .with_key_type(&key_type)
-                        .with_client_id(client_id)
+                        .with_client_id(client_id),
                 );
                 filtered.push(id);
             } else {
                 // Log key filtered
                 self.log(
-                    LogEvent::key_filtered(&self.socket_path, &fingerprint, &id.comment, "no matching rule")
-                        .with_key_type(&key_type)
-                        .with_client_id(client_id)
+                    LogEvent::key_filtered(
+                        &self.socket_path,
+                        &fingerprint,
+                        &id.comment,
+                        "no matching rule",
+                    )
+                    .with_key_type(&key_type)
+                    .with_client_id(client_id),
                 );
             }
         }
@@ -211,7 +235,7 @@ impl Proxy {
                 .with_socket_name(&self.socket_path)
                 .with_client_id(client_id)
                 .with_key_count(filtered_count as u32)
-                .with_filtered_count((original_count - filtered_count) as u32)
+                .with_filtered_count((original_count - filtered_count) as u32),
         );
 
         // Update allowed keys cache
@@ -231,7 +255,11 @@ impl Proxy {
     ///
     /// Only allows signing with keys that are in the allowed set
     /// (i.e., keys that passed the filter in a previous REQUEST_IDENTITIES).
-    async fn handle_sign_request(&self, request: AgentMessage, client_id: &str) -> Result<AgentMessage> {
+    async fn handle_sign_request(
+        &self,
+        request: AgentMessage,
+        client_id: &str,
+    ) -> Result<AgentMessage> {
         // Parse the key blob from the request
         let key_blob = match request.parse_sign_request_key() {
             Ok(blob) => blob,
@@ -243,14 +271,17 @@ impl Proxy {
 
         // Get fingerprint for logging
         let identity = Identity::new(key_blob.clone(), String::new());
-        let fingerprint = identity.fingerprint().map(|f| f.to_string()).unwrap_or_default();
+        let fingerprint = identity
+            .fingerprint()
+            .map(|f| f.to_string())
+            .unwrap_or_default();
 
         // Log sign request
         self.log(
             LogEvent::new(crate::logging::jsonl::LogEventKind::SignRequest)
                 .with_socket_name(&self.socket_path)
                 .with_client_id(client_id)
-                .with_fingerprint(&fingerprint)
+                .with_fingerprint(&fingerprint),
         );
 
         // Check if this key is in the allowed set
@@ -260,7 +291,7 @@ impl Proxy {
             self.log(
                 LogEvent::sign_response(&self.socket_path, &fingerprint, Decision::Denied)
                     .with_client_id(client_id)
-                    .with_reason("key not in allowed set")
+                    .with_reason("key not in allowed set"),
             );
             return Ok(AgentMessage::failure());
         }
@@ -277,7 +308,7 @@ impl Proxy {
         };
         self.log(
             LogEvent::sign_response(&self.socket_path, &fingerprint, decision)
-                .with_client_id(client_id)
+                .with_client_id(client_id),
         );
 
         Ok(response)

@@ -13,7 +13,7 @@ pub use jsonl::{Decision, JsonlWriter, LogEvent, LogEventKind};
 use std::path::Path;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Logging configuration
 #[derive(Debug, Clone, Default)]
