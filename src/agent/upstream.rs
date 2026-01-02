@@ -112,7 +112,8 @@ mod tests {
     #[tokio::test]
     async fn test_upstream_from_env_missing() {
         // Clear SSH_AUTH_SOCK to test missing case
-        std::env::remove_var("SSH_AUTH_SOCK");
+        // SAFETY: This test runs in isolation
+        unsafe { std::env::remove_var("SSH_AUTH_SOCK") };
         let result = Upstream::from_env();
         assert!(result.is_err());
     }

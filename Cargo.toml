@@ -1,7 +1,7 @@
 [package]
 name = "authsock-filter"
 version = "0.1.2"
-edition = "2021"
+edition = "2024"
 description = "SSH agent proxy with filtering and logging"
 license = "MIT"
 authors = ["Yoshiaki Kawazu (@kawaz)"]

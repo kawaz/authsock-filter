@@ -268,12 +268,13 @@ mod tests {
 
     #[test]
     fn test_expand_path_env_var() {
-        std::env::set_var("TEST_VAR", "/test/path");
+        // SAFETY: This test runs in isolation and TEST_VAR is not used elsewhere
+        unsafe { std::env::set_var("TEST_VAR", "/test/path") };
         assert_eq!(
             expand_path("$TEST_VAR/socket").unwrap(),
             "/test/path/socket"
         );
-        std::env::remove_var("TEST_VAR");
+        unsafe { std::env::remove_var("TEST_VAR") };
     }
 
     #[test]
