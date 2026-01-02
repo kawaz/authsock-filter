@@ -9,7 +9,8 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use args::{
-    ConfigArgs, RegisterArgs, RunArgs, StartArgs, StatusArgs, StopArgs, UnregisterArgs, UpgradeArgs,
+    CompletionArgs, ConfigArgs, RegisterArgs, RunArgs, StartArgs, StatusArgs, StopArgs,
+    UnregisterArgs, UpgradeArgs,
 };
 
 /// SSH agent proxy with filtering and logging
@@ -64,4 +65,7 @@ pub enum Commands {
 
     /// Unregister the OS service
     Unregister(UnregisterArgs),
+
+    /// Generate shell completions
+    Completion(CompletionArgs),
 }

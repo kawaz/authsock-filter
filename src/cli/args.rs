@@ -1,6 +1,7 @@
 //! Argument structures for CLI commands
 
 use clap::Args;
+use clap_complete::Shell;
 use std::path::PathBuf;
 
 /// Arguments for the `run` command
@@ -98,10 +99,6 @@ pub struct ConfigArgs {
 /// Arguments for the `upgrade` command
 #[derive(Args, Debug, Clone)]
 pub struct UpgradeArgs {
-    /// Target version (default: latest)
-    #[arg(long)]
-    pub version: Option<String>,
-
     /// Force upgrade even if already at target version
     #[arg(short, long)]
     pub force: bool,
@@ -149,4 +146,12 @@ pub struct UnregisterArgs {
     /// Remove configuration files as well
     #[arg(long)]
     pub purge: bool,
+}
+
+/// Arguments for the `completion` command
+#[derive(Args, Debug, Clone)]
+pub struct CompletionArgs {
+    /// Shell to generate completions for
+    #[arg(value_enum)]
+    pub shell: Shell,
 }

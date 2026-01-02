@@ -1,5 +1,6 @@
 //! Command implementations for authsock-filter CLI
 
+pub mod completion;
 pub mod config;
 pub mod register;
 pub mod run;

@@ -24,6 +24,9 @@ async fn main() -> Result<()> {
         Commands::Unregister(args) => {
             authsock_filter::cli::commands::unregister::execute(args).await?
         }
+        Commands::Completion(args) => {
+            authsock_filter::cli::commands::completion::execute(args).await?
+        }
     }
 
     Ok(())

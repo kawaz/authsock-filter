@@ -81,14 +81,8 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
     println!("Current version: {}", current_version);
     println!();
 
-    // Fetch release information from GitHub
-    let release = if let Some(target_version) = &args.version {
-        // Get specific version
-        fetch_release(Some(target_version)).await?
-    } else {
-        // Get latest version
-        fetch_release(None).await?
-    };
+    // Fetch latest release information from GitHub
+    let release = fetch_release().await?;
 
     let latest_version = release.tag_name.trim_start_matches('v');
     println!("Latest version:  {}", latest_version);
@@ -235,24 +229,12 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
     Ok(())
 }
 
-/// Fetch release information from GitHub
-async fn fetch_release(version: Option<&String>) -> Result<GitHubRelease> {
-    let url = if let Some(v) = version {
-        let tag = if v.starts_with('v') {
-            v.clone()
-        } else {
-            format!("v{}", v)
-        };
-        format!(
-            "https://api.github.com/repos/{}/{}/releases/tags/{}",
-            GITHUB_OWNER, GITHUB_REPO, tag
-        )
-    } else {
-        format!(
-            "https://api.github.com/repos/{}/{}/releases/latest",
-            GITHUB_OWNER, GITHUB_REPO
-        )
-    };
+/// Fetch latest release information from GitHub
+async fn fetch_release() -> Result<GitHubRelease> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases/latest",
+        GITHUB_OWNER, GITHUB_REPO
+    );
 
     info!(url = %url, "Fetching release information");
 
@@ -267,11 +249,7 @@ async fn fetch_release(version: Option<&String>) -> Result<GitHubRelease> {
 
     if !response.status().is_success() {
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            if let Some(v) = version {
-                bail!("Release version {} not found", v);
-            } else {
-                bail!("No releases found for this repository");
-            }
+            bail!("No releases found for this repository");
         }
         bail!("GitHub API error: HTTP {}", response.status());
     }
