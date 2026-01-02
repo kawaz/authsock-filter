@@ -40,12 +40,12 @@ impl Filter {
     /// Get a description of this filter for logging
     pub fn description(&self) -> String {
         match self {
-            Filter::Fingerprint(m) => format!("fingerprint:{}", m.pattern()),
-            Filter::Pubkey(_) => "pubkey:<key>".to_string(),
-            Filter::Keyfile(m) => format!("keyfile:{}", m.path()),
-            Filter::Comment(m) => format!("comment:{}", m.pattern()),
-            Filter::KeyType(m) => format!("type:{}", m.key_type()),
-            Filter::GitHub(m) => format!("github:{}", m.username()),
+            Filter::Fingerprint(m) => format!("fingerprint={}", m.pattern()),
+            Filter::Pubkey(_) => "pubkey=<key>".to_string(),
+            Filter::Keyfile(m) => format!("keyfile={}", m.path()),
+            Filter::Comment(m) => format!("comment={}", m.pattern()),
+            Filter::KeyType(m) => format!("type={}", m.key_type()),
+            Filter::GitHub(m) => format!("github={}", m.username()),
         }
     }
 }
@@ -94,23 +94,23 @@ impl FilterRule {
             return Ok(filter);
         }
 
-        // Parse explicit prefix
-        if let Some(rest) = s.strip_prefix("fingerprint:") {
+        // Parse explicit prefix (type=value format)
+        if let Some(rest) = s.strip_prefix("fingerprint=") {
             return Ok(Filter::Fingerprint(FingerprintMatcher::new(rest)?));
         }
-        if let Some(rest) = s.strip_prefix("pubkey:") {
+        if let Some(rest) = s.strip_prefix("pubkey=") {
             return Ok(Filter::Pubkey(PubkeyMatcher::new(rest)?));
         }
-        if let Some(rest) = s.strip_prefix("keyfile:") {
+        if let Some(rest) = s.strip_prefix("keyfile=") {
             return Ok(Filter::Keyfile(KeyfileMatcher::new(rest)?));
         }
-        if let Some(rest) = s.strip_prefix("comment:") {
+        if let Some(rest) = s.strip_prefix("comment=") {
             return Ok(Filter::Comment(CommentMatcher::new(rest)?));
         }
-        if let Some(rest) = s.strip_prefix("type:") {
+        if let Some(rest) = s.strip_prefix("type=") {
             return Ok(Filter::KeyType(KeyTypeMatcher::new(rest)));
         }
-        if let Some(rest) = s.strip_prefix("github:") {
+        if let Some(rest) = s.strip_prefix("github=") {
             return Ok(Filter::GitHub(GitHubKeysMatcher::new(rest)));
         }
 
@@ -164,28 +164,28 @@ mod tests {
 
     #[test]
     fn test_parse_explicit_fingerprint() {
-        let rule = FilterRule::parse("fingerprint:SHA256:abc123").unwrap();
+        let rule = FilterRule::parse("fingerprint=SHA256:abc123").unwrap();
         assert!(!rule.negated);
         assert!(matches!(rule.filter, Filter::Fingerprint(_)));
     }
 
     #[test]
     fn test_parse_negated() {
-        let rule = FilterRule::parse("-type:dsa").unwrap();
+        let rule = FilterRule::parse("-type=dsa").unwrap();
         assert!(rule.negated);
         assert!(matches!(rule.filter, Filter::KeyType(_)));
     }
 
     #[test]
     fn test_parse_comment() {
-        let rule = FilterRule::parse("comment:~@work").unwrap();
+        let rule = FilterRule::parse("comment=~@work").unwrap();
         assert!(!rule.negated);
         assert!(matches!(rule.filter, Filter::Comment(_)));
     }
 
     #[test]
     fn test_parse_github() {
-        let rule = FilterRule::parse("github:kawaz").unwrap();
+        let rule = FilterRule::parse("github=kawaz").unwrap();
         assert!(!rule.negated);
         assert!(matches!(rule.filter, Filter::GitHub(_)));
     }
