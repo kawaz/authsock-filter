@@ -33,8 +33,8 @@ fn is_process_running(pid: u32) -> bool {
 
 /// Execute the start command
 pub async fn execute(args: StartArgs) -> Result<()> {
-    // Parse socket specs before moving args fields
-    let socket_specs = args.parse_socket_specs();
+    // Parse upstream groups before moving args fields
+    let upstream_groups = args.parse_upstream_groups();
     let pid_file = args.pid_file.unwrap_or_else(default_pid_file);
 
     // Check if already running
@@ -53,14 +53,15 @@ pub async fn execute(args: StartArgs) -> Result<()> {
         }
     }
 
-    // Validate upstream socket
-    let upstream = args
-        .upstream
-        .as_ref()
-        .context("Upstream socket path is required. Set SSH_AUTH_SOCK or use --upstream")?;
+    // Validate upstream groups
+    if upstream_groups.is_empty() {
+        bail!("No upstream groups configured. Use --upstream and --socket to define proxy configuration.");
+    }
 
-    if !upstream.exists() {
-        bail!("Upstream socket does not exist: {}", upstream.display());
+    for group in &upstream_groups {
+        if !group.path.exists() {
+            bail!("Upstream socket does not exist: {}", group.path.display());
+        }
     }
 
     info!("Starting daemon...");
@@ -70,17 +71,19 @@ pub async fn execute(args: StartArgs) -> Result<()> {
 
     let mut cmd = Command::new(&current_exe);
     cmd.arg("run");
-    cmd.arg("--upstream").arg(upstream);
 
     if let Some(log) = &args.log {
         cmd.arg("--log").arg(log);
     }
 
-    // Pass socket and filter arguments
-    for spec in &socket_specs {
-        cmd.arg("--socket").arg(&spec.path);
-        for filter in &spec.filters {
-            cmd.arg("--filter").arg(filter);
+    // Pass upstream groups and socket arguments
+    for group in &upstream_groups {
+        cmd.arg("--upstream").arg(&group.path);
+        for spec in &group.sockets {
+            cmd.arg("--socket").arg(&spec.path);
+            for filter in &spec.filters {
+                cmd.arg(filter);
+            }
         }
     }
 

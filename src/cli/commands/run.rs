@@ -13,36 +13,36 @@ use crate::logging::jsonl::{JsonlWriter, LogEvent};
 
 /// Execute the run command
 pub async fn execute(args: RunArgs) -> Result<()> {
-    // Validate upstream socket
-    let upstream_path = args
-        .upstream
-        .as_ref()
-        .context("Upstream socket path is required. Set SSH_AUTH_SOCK or use --upstream")?;
+    // Parse upstream groups from command line arguments
+    let upstream_groups = args.parse_upstream_groups();
 
-    if !upstream_path.exists() {
-        bail!("Upstream socket does not exist: {}", upstream_path.display());
+    if upstream_groups.is_empty() {
+        bail!("No upstream groups configured. Use --upstream and --socket to define proxy configuration.");
     }
 
-    // Parse socket specifications from --socket and --filter arguments
-    let socket_specs = args.parse_socket_specs();
-
-    if socket_specs.is_empty() {
-        warn!("No socket specifications provided. Use --socket and --filter to define filtered sockets.");
-    }
+    // Count total sockets
+    let total_sockets: usize = upstream_groups.iter().map(|g| g.sockets.len()).sum();
 
     info!(
-        upstream = %upstream_path.display(),
-        sockets = socket_specs.len(),
+        upstream_count = upstream_groups.len(),
+        socket_count = total_sockets,
         "Starting authsock-filter"
     );
 
     // Log configuration
-    for spec in &socket_specs {
+    for group in &upstream_groups {
         info!(
-            socket = %spec.path.display(),
-            filters = ?spec.filters,
-            "Configured socket"
+            upstream = %group.path.display(),
+            sockets = group.sockets.len(),
+            "Upstream group"
         );
+        for spec in &group.sockets {
+            info!(
+                socket = %spec.path.display(),
+                filters = ?spec.filters,
+                "  Configured socket"
+            );
+        }
     }
 
     // Set up JSONL logger if specified
@@ -55,85 +55,96 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         None
     };
 
-    // Create upstream connection manager
-    let upstream = Arc::new(Upstream::new(upstream_path.to_string_lossy().to_string()));
-
-    // Start proxy servers for each socket spec
+    // Start proxy servers for each upstream group
     let mut handles = Vec::new();
     let mut listeners = Vec::new();
 
-    for spec in &socket_specs {
-        // Parse filters
-        let filter = FilterEvaluator::parse(&spec.filters)
-            .context(format!("Failed to parse filters for socket {}", spec.path.display()))?;
-
-        // Ensure async filters are loaded (e.g., GitHub keys)
-        filter.ensure_loaded().await.context(format!(
-            "Failed to load filter data for socket {}",
-            spec.path.display()
-        ))?;
-
-        let socket_path_str = spec.path.to_string_lossy().to_string();
-
-        // Create proxy with optional logger
-        let mut proxy = Proxy::new_shared(upstream.clone(), Arc::new(filter))
-            .with_socket_path(&socket_path_str);
-
-        if let Some(ref log) = logger {
-            proxy = proxy.with_logger(log.clone());
-            // Log server start
-            if let Err(e) = log.write(&LogEvent::server_start(&socket_path_str)) {
-                warn!(error = %e, "Failed to write server start log");
-            }
+    for group in &upstream_groups {
+        // Validate upstream socket exists
+        if !group.path.exists() {
+            bail!("Upstream socket does not exist: {}", group.path.display());
         }
 
-        let proxy = Arc::new(proxy);
+        // Create upstream connection manager for this group
+        let upstream = Arc::new(Upstream::new(group.path.to_string_lossy().to_string()));
 
-        // Remove existing socket if present
-        if spec.path.exists() {
-            debug!(path = %spec.path.display(), "Removing existing socket file");
-            std::fs::remove_file(&spec.path)
-                .context(format!("Failed to remove existing socket at {}", spec.path.display()))?;
-        }
+        for spec in &group.sockets {
+            // Parse filters
+            let filter = FilterEvaluator::parse(&spec.filters)
+                .context(format!("Failed to parse filters for socket {}", spec.path.display()))?;
 
-        // Ensure parent directory exists
-        if let Some(parent) = spec.path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .context(format!("Failed to create directory {}", parent.display()))?;
-            }
-        }
+            // Ensure async filters are loaded (e.g., GitHub keys)
+            filter.ensure_loaded().await.context(format!(
+                "Failed to load filter data for socket {}",
+                spec.path.display()
+            ))?;
 
-        // Bind listener
-        let listener = UnixListener::bind(&spec.path)
-            .context(format!("Failed to bind to socket {}", spec.path.display()))?;
+            let socket_path_str = spec.path.to_string_lossy().to_string();
 
-        info!(path = %spec.path.display(), "Listening on socket");
+            // Create proxy with optional logger
+            let mut proxy = Proxy::new_shared(upstream.clone(), Arc::new(filter))
+                .with_socket_path(&socket_path_str);
 
-        let socket_path = spec.path.clone();
-        listeners.push((socket_path.clone(), socket_path_str.clone()));
-
-        // Spawn task to handle connections
-        let handle = tokio::spawn(async move {
-            loop {
-                match listener.accept().await {
-                    Ok((stream, _)) => {
-                        let proxy = proxy.clone();
-                        tokio::spawn(async move {
-                            if let Err(e) = proxy.handle_client(stream).await {
-                                debug!(error = %e, "Client connection error");
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        error!(error = %e, "Failed to accept connection");
-                        break;
-                    }
+            if let Some(ref log) = logger {
+                proxy = proxy.with_logger(log.clone());
+                // Log server start
+                if let Err(e) = log.write(&LogEvent::server_start(&socket_path_str)) {
+                    warn!(error = %e, "Failed to write server start log");
                 }
             }
-        });
 
-        handles.push(handle);
+            let proxy = Arc::new(proxy);
+
+            // Remove existing socket if present
+            if spec.path.exists() {
+                debug!(path = %spec.path.display(), "Removing existing socket file");
+                std::fs::remove_file(&spec.path)
+                    .context(format!("Failed to remove existing socket at {}", spec.path.display()))?;
+            }
+
+            // Ensure parent directory exists
+            if let Some(parent) = spec.path.parent() {
+                if !parent.exists() {
+                    std::fs::create_dir_all(parent)
+                        .context(format!("Failed to create directory {}", parent.display()))?;
+                }
+            }
+
+            // Bind listener
+            let listener = UnixListener::bind(&spec.path)
+                .context(format!("Failed to bind to socket {}", spec.path.display()))?;
+
+            info!(
+                path = %spec.path.display(),
+                upstream = %group.path.display(),
+                "Listening on socket"
+            );
+
+            let socket_path = spec.path.clone();
+            listeners.push((socket_path.clone(), socket_path_str.clone()));
+
+            // Spawn task to handle connections
+            let handle = tokio::spawn(async move {
+                loop {
+                    match listener.accept().await {
+                        Ok((stream, _)) => {
+                            let proxy = proxy.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = proxy.handle_client(stream).await {
+                                    debug!(error = %e, "Client connection error");
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Failed to accept connection");
+                            break;
+                        }
+                    }
+                }
+            });
+
+            handles.push(handle);
+        }
     }
 
     info!(

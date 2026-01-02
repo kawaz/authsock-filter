@@ -28,7 +28,7 @@ Download the latest binary from [Releases](https://github.com/kawaz/authsock-fil
 
 ```bash
 # Create a filtered socket that only shows keys with "@work" in the comment
-authsock-filter run --socket /tmp/work.sock comment=*@work*
+authsock-filter run --upstream "$SSH_AUTH_SOCK" --socket /tmp/work.sock comment=*@work*
 
 # Use the filtered socket
 SSH_AUTH_SOCK=/tmp/work.sock ssh user@work-server
@@ -69,15 +69,29 @@ Options:
   --socket <PATH> [ARGS...]  Socket definition with inline filters
 ```
 
-### Socket and Filter Format
+### Upstream Groups
 
-Each `--socket` starts a new socket definition. Arguments after the path until the next `--socket` are filters:
+Each `--upstream` starts a new group. Subsequent `--socket` definitions belong to that upstream:
 
 ```bash
+# Single upstream (default uses $SSH_AUTH_SOCK)
 authsock-filter run \
+  --upstream "$SSH_AUTH_SOCK" \
   --socket /tmp/work.sock comment=*@work* type=ed25519 \
   --socket /tmp/github.sock github=kawaz
+
+# Multiple upstreams (e.g., macOS Keychain + 1Password)
+authsock-filter run \
+  --upstream "$SSH_AUTH_SOCK" \
+    --socket /tmp/mac-work.sock comment=*@work* \
+    --socket /tmp/mac-personal.sock -comment=*@work* \
+  --upstream ~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock \
+    --socket /tmp/1p-github.sock github=kawaz
 ```
+
+### Socket and Filter Format
+
+Arguments after `--socket PATH` until the next `--socket` or `--upstream` are filters:
 
 Filters use `type=value` format. Multiple filters on the same socket are ANDed together.
 
@@ -215,7 +229,12 @@ authsock-filter completion fish | source
   - Negation filter completion (-type=, -comment=, etc.)
   - Key type value completion for type= and -type=
   - Path completion for socket paths
-- [ ] Socket-specific options (`--logging`, `--mode`, etc.)
+- [x] Multiple upstream support
+  - Each `--upstream` starts a new group
+  - Enables using multiple SSH agents (e.g., macOS Keychain + 1Password)
+- [ ] Feature flags per upstream (`--allow-add`, `--allow-remove`, etc.)
+- [ ] Socket-specific options (`--mode`, etc.)
+- [ ] CLI/Config bidirectional conversion (`--dump-config`, `config --as-cli`)
 - [ ] Unify config file filter format with CLI (`type=value` style)
 - [ ] Register to mise registry for `mise use authsock-filter` support
 

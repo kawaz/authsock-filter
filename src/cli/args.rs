@@ -12,14 +12,24 @@ pub struct SocketSpec {
     pub filters: Vec<String>,
 }
 
+/// Upstream group containing an upstream path and its associated sockets
+#[derive(Debug, Clone)]
+pub struct UpstreamGroup {
+    pub path: PathBuf,
+    pub sockets: Vec<SocketSpec>,
+}
+
 /// Arguments for the `run` command
 #[derive(Args, Debug, Clone)]
 pub struct RunArgs {
     /// Upstream SSH agent socket path
     ///
-    /// Defaults to the value of SSH_AUTH_SOCK environment variable
-    #[arg(long, env = "SSH_AUTH_SOCK")]
-    pub upstream: Option<PathBuf>,
+    /// Each --upstream starts a new group. Subsequent --socket definitions
+    /// belong to that upstream until the next --upstream.
+    ///
+    /// Defaults to the value of SSH_AUTH_SOCK environment variable if not specified.
+    #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
+    pub upstream: Vec<PathBuf>,
 
     /// Path to JSONL log file
     #[arg(long)]
@@ -45,10 +55,12 @@ pub struct RunArgs {
 }
 
 impl RunArgs {
-    /// Parse socket and filter arguments into SocketSpecs
-    /// Filters are associated with the preceding socket
-    pub fn parse_socket_specs(&self) -> Vec<SocketSpec> {
-        parse_socket_specs_from_args()
+    /// Parse upstream groups from command line arguments
+    ///
+    /// Each --upstream starts a new group, and subsequent --socket definitions
+    /// belong to that upstream until the next --upstream.
+    pub fn parse_upstream_groups(&self) -> Vec<UpstreamGroup> {
+        parse_upstream_groups_from_args()
     }
 }
 
@@ -56,8 +68,8 @@ impl RunArgs {
 #[derive(Args, Debug, Clone)]
 pub struct StartArgs {
     /// Upstream SSH agent socket path
-    #[arg(long, env = "SSH_AUTH_SOCK")]
-    pub upstream: Option<PathBuf>,
+    #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
+    pub upstream: Vec<PathBuf>,
 
     /// Path to JSONL log file
     #[arg(long)]
@@ -73,9 +85,9 @@ pub struct StartArgs {
 }
 
 impl StartArgs {
-    /// Parse socket and filter arguments into SocketSpecs
-    pub fn parse_socket_specs(&self) -> Vec<SocketSpec> {
-        parse_socket_specs_from_args()
+    /// Parse upstream groups from command line arguments
+    pub fn parse_upstream_groups(&self) -> Vec<UpstreamGroup> {
+        parse_upstream_groups_from_args()
     }
 }
 
@@ -155,8 +167,8 @@ pub struct RegisterArgs {
     pub enable: bool,
 
     /// Upstream SSH agent socket path for service
-    #[arg(long)]
-    pub upstream: Option<PathBuf>,
+    #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
+    pub upstream: Vec<PathBuf>,
 
     /// Socket definition with filters and options
     #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
@@ -164,9 +176,9 @@ pub struct RegisterArgs {
 }
 
 impl RegisterArgs {
-    /// Parse socket and filter arguments into SocketSpecs
-    pub fn parse_socket_specs(&self) -> Vec<SocketSpec> {
-        parse_socket_specs_from_args()
+    /// Parse upstream groups from command line arguments
+    pub fn parse_upstream_groups(&self) -> Vec<UpstreamGroup> {
+        parse_upstream_groups_from_args()
     }
 }
 
@@ -190,21 +202,53 @@ pub struct CompletionArgs {
     pub shell: Shell,
 }
 
-/// Parse socket specs from command line arguments
+/// Parse upstream groups from command line arguments
 ///
-/// New format: --socket PATH [FILTERS...] [OPTIONS...]
-/// Arguments after PATH until the next --socket belong to this socket
-pub fn parse_socket_specs_from_args() -> Vec<SocketSpec> {
+/// Each --upstream starts a new group. Subsequent --socket definitions
+/// belong to that upstream until the next --upstream.
+///
+/// If no --upstream is specified, uses SSH_AUTH_SOCK environment variable.
+pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
     let args: Vec<String> = std::env::args().collect();
-    let mut specs: Vec<SocketSpec> = Vec::new();
+    let mut groups: Vec<UpstreamGroup> = Vec::new();
+    let mut current_group: Option<UpstreamGroup> = None;
     let mut current_socket: Option<SocketSpec> = None;
 
     let mut iter = args.iter().peekable();
     while let Some(arg) = iter.next() {
-        if arg == "--socket" || arg.starts_with("--socket=") {
+        if arg == "--upstream" || arg.starts_with("--upstream=") {
+            // Save current socket to current group if any
+            if let Some(spec) = current_socket.take() {
+                if let Some(ref mut group) = current_group {
+                    group.sockets.push(spec);
+                }
+            }
+            // Save current group if any
+            if let Some(group) = current_group.take() {
+                if !group.sockets.is_empty() {
+                    groups.push(group);
+                }
+            }
+
+            // Get upstream path
+            let path = if arg == "--upstream" {
+                iter.next().map(|s| s.as_str())
+            } else {
+                arg.strip_prefix("--upstream=")
+            };
+
+            if let Some(path) = path {
+                current_group = Some(UpstreamGroup {
+                    path: expand_path(path),
+                    sockets: Vec::new(),
+                });
+            }
+        } else if arg == "--socket" || arg.starts_with("--socket=") {
             // Save previous socket if any
             if let Some(spec) = current_socket.take() {
-                specs.push(spec);
+                if let Some(ref mut group) = current_group {
+                    group.sockets.push(spec);
+                }
             }
 
             // Get socket path
@@ -215,28 +259,40 @@ pub fn parse_socket_specs_from_args() -> Vec<SocketSpec> {
             };
 
             if let Some(path) = path {
+                // If no upstream yet, create default from SSH_AUTH_SOCK
+                if current_group.is_none() {
+                    if let Ok(ssh_auth_sock) = std::env::var("SSH_AUTH_SOCK") {
+                        current_group = Some(UpstreamGroup {
+                            path: PathBuf::from(ssh_auth_sock),
+                            sockets: Vec::new(),
+                        });
+                    }
+                }
+
                 current_socket = Some(SocketSpec {
-                    path: PathBuf::from(path),
+                    path: expand_path(path),
                     filters: Vec::new(),
                 });
             }
         } else if let Some(ref mut spec) = current_socket {
             // Arguments after --socket PATH belong to this socket
             // Skip known global options
-            if arg.starts_with("--upstream")
-                || arg.starts_with("--log")
+            if arg.starts_with("--log")
                 || arg.starts_with("--config")
                 || arg.starts_with("--verbose")
                 || arg.starts_with("--quiet")
                 || arg.starts_with("--pid-file")
+                || arg.starts_with("--name")
+                || arg.starts_with("--start")
+                || arg.starts_with("--enable")
+                || arg.starts_with("--purge")
                 || arg == "-h"
                 || arg == "--help"
                 || arg == "-V"
                 || arg == "--version"
             {
                 // Skip global option and its value if needed
-                if arg == "--upstream" || arg == "--log" || arg == "--config" || arg == "--pid-file"
-                {
+                if arg == "--log" || arg == "--config" || arg == "--pid-file" || arg == "--name" {
                     iter.next(); // skip value
                 }
                 continue;
@@ -247,16 +303,37 @@ pub fn parse_socket_specs_from_args() -> Vec<SocketSpec> {
             if !arg.starts_with("--") {
                 spec.filters.push(arg.clone());
             }
-            // TODO: Handle socket-specific options like --logging, --mode
+            // TODO: Handle socket-specific options like --mode
         }
     }
 
-    // Save last socket
+    // Save last socket to current group
     if let Some(spec) = current_socket {
-        specs.push(spec);
+        if let Some(ref mut group) = current_group {
+            group.sockets.push(spec);
+        }
     }
 
-    specs
+    // Save last group
+    if let Some(group) = current_group {
+        if !group.sockets.is_empty() {
+            groups.push(group);
+        }
+    }
+
+    groups
+}
+
+/// Expand path with ~ and environment variables
+fn expand_path(path: &str) -> PathBuf {
+    let expanded = shellexpand::full(path).unwrap_or(std::borrow::Cow::Borrowed(path));
+    PathBuf::from(expanded.as_ref())
+}
+
+/// Completer for --upstream arguments (path completion)
+fn upstream_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let current = current.to_string_lossy();
+    complete_path(&current)
 }
 
 /// Filter types for completion
