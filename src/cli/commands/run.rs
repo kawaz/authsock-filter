@@ -2,19 +2,14 @@
 
 use anyhow::{bail, Context, Result};
 use std::sync::Arc;
+use tokio::net::UnixListener;
 use tokio::signal;
-use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
 
-use crate::agent::{Proxy, Server, Upstream};
-use crate::cli::args::{RunArgs, SocketSpec};
+use crate::agent::{Proxy, Upstream};
+use crate::cli::args::RunArgs;
 use crate::filter::FilterEvaluator;
-
-/// A running socket server with its proxy configuration
-struct SocketServer {
-    server: Server,
-    proxy: Arc<Proxy>,
-}
+use crate::logging::jsonl::{JsonlWriter, LogEvent};
 
 /// Execute the run command
 pub async fn execute(args: RunArgs) -> Result<()> {
@@ -50,50 +45,101 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         );
     }
 
-    // Set up log file if specified
-    if let Some(log_path) = &args.log {
+    // Set up JSONL logger if specified
+    let logger: Option<Arc<JsonlWriter>> = if let Some(log_path) = &args.log {
         info!(log = %log_path.display(), "JSONL logging enabled");
-        // TODO: Initialize JSONL logger for request/response logging
-    }
+        let writer = JsonlWriter::new(log_path)
+            .context(format!("Failed to create log file: {}", log_path.display()))?;
+        Some(Arc::new(writer))
+    } else {
+        None
+    };
 
     // Create upstream connection manager
-    let upstream = Arc::new(Upstream::new(upstream_path));
+    let upstream = Arc::new(Upstream::new(upstream_path.to_string_lossy().to_string()));
 
-    // Create shutdown channel
-    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    // Start proxy servers for each socket spec
+    let mut handles = Vec::new();
+    let mut listeners = Vec::new();
 
-    // Create and bind servers for each socket spec
-    let mut socket_servers = Vec::new();
     for spec in &socket_specs {
-        match create_socket_server(spec, Arc::clone(&upstream)).await {
-            Ok(server) => socket_servers.push(server),
-            Err(e) => {
-                error!(
-                    socket = %spec.path.display(),
-                    error = %e,
-                    "Failed to create socket server"
-                );
-                // Clean up already bound sockets on failure
-                drop(socket_servers);
-                return Err(e);
+        // Parse filters
+        let filter = FilterEvaluator::parse(&spec.filters)
+            .context(format!("Failed to parse filters for socket {}", spec.path.display()))?;
+
+        // Ensure async filters are loaded (e.g., GitHub keys)
+        filter.ensure_loaded().await.context(format!(
+            "Failed to load filter data for socket {}",
+            spec.path.display()
+        ))?;
+
+        let socket_path_str = spec.path.to_string_lossy().to_string();
+
+        // Create proxy with optional logger
+        let mut proxy = Proxy::new_shared(upstream.clone(), Arc::new(filter))
+            .with_socket_path(&socket_path_str);
+
+        if let Some(ref log) = logger {
+            proxy = proxy.with_logger(log.clone());
+            // Log server start
+            if let Err(e) = log.write(&LogEvent::server_start(&socket_path_str)) {
+                warn!(error = %e, "Failed to write server start log");
             }
         }
+
+        let proxy = Arc::new(proxy);
+
+        // Remove existing socket if present
+        if spec.path.exists() {
+            debug!(path = %spec.path.display(), "Removing existing socket file");
+            std::fs::remove_file(&spec.path)
+                .context(format!("Failed to remove existing socket at {}", spec.path.display()))?;
+        }
+
+        // Ensure parent directory exists
+        if let Some(parent) = spec.path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory {}", parent.display()))?;
+            }
+        }
+
+        // Bind listener
+        let listener = UnixListener::bind(&spec.path)
+            .context(format!("Failed to bind to socket {}", spec.path.display()))?;
+
+        info!(path = %spec.path.display(), "Listening on socket");
+
+        let socket_path = spec.path.clone();
+        listeners.push((socket_path.clone(), socket_path_str.clone()));
+
+        // Spawn task to handle connections
+        let handle = tokio::spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => {
+                        let proxy = proxy.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = proxy.handle_client(stream).await {
+                                debug!(error = %e, "Client connection error");
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!(error = %e, "Failed to accept connection");
+                        break;
+                    }
+                }
+            }
+        });
+
+        handles.push(handle);
     }
 
     info!(
-        count = socket_servers.len(),
+        count = handles.len(),
         "Proxy server started. Press Ctrl+C to stop."
     );
-
-    // Spawn server tasks
-    let mut handles = Vec::new();
-    for socket_server in socket_servers {
-        let shutdown_rx = shutdown_rx.clone();
-        let handle = tokio::spawn(async move {
-            run_socket_server(socket_server, shutdown_rx).await
-        });
-        handles.push(handle);
-    }
 
     // Wait for shutdown signal
     signal::ctrl_c()
@@ -102,18 +148,24 @@ pub async fn execute(args: RunArgs) -> Result<()> {
 
     info!("Received shutdown signal, stopping...");
 
-    // Send shutdown signal to all servers
-    let _ = shutdown_tx.send(true);
-
-    // Wait for all servers to shut down gracefully
+    // Cancel all listener tasks
     for handle in handles {
-        match handle.await {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                debug!(error = %e, "Server task finished with error");
+        handle.abort();
+    }
+
+    // Clean up socket files and log server stop
+    for (path, path_str) in listeners {
+        if let Some(ref log) = logger {
+            if let Err(e) = log.write(&LogEvent::server_stop(&path_str)) {
+                warn!(error = %e, "Failed to write server stop log");
             }
-            Err(e) => {
-                warn!(error = %e, "Server task panicked");
+        }
+
+        if path.exists() {
+            if let Err(e) = std::fs::remove_file(&path) {
+                warn!(path = %path.display(), error = %e, "Failed to remove socket file");
+            } else {
+                debug!(path = %path.display(), "Removed socket file");
             }
         }
     }
@@ -122,60 +174,3 @@ pub async fn execute(args: RunArgs) -> Result<()> {
 
     Ok(())
 }
-
-/// Create a socket server for a given spec
-async fn create_socket_server(spec: &SocketSpec, upstream: Arc<Upstream>) -> Result<SocketServer> {
-    // Parse filters
-    let filter = FilterEvaluator::parse(&spec.filters)
-        .with_context(|| format!("Failed to parse filters for socket {}", spec.path.display()))?;
-
-    // Ensure async filters are loaded (e.g., GitHub keys)
-    filter.ensure_loaded().await.with_context(|| {
-        format!(
-            "Failed to load filter data for socket {}",
-            spec.path.display()
-        )
-    })?;
-
-    // Create proxy
-    let proxy = Arc::new(Proxy::new_shared(upstream, Arc::new(filter)));
-
-    // Create and bind server
-    let mut server = Server::new(&spec.path);
-    server.bind().await.with_context(|| {
-        format!(
-            "Failed to bind socket at {}",
-            spec.path.display()
-        )
-    })?;
-
-    Ok(SocketServer { server, proxy })
-}
-
-/// Run a socket server until shutdown
-async fn run_socket_server(
-    socket_server: SocketServer,
-    shutdown_rx: watch::Receiver<bool>,
-) -> Result<()> {
-    let SocketServer { server, proxy } = socket_server;
-    let socket_path = server.socket_path().to_path_buf();
-
-    debug!(socket = %socket_path.display(), "Starting server loop");
-
-    let result = server
-        .run(
-            move |stream| {
-                let proxy = Arc::clone(&proxy);
-                async move {
-                    proxy.handle_client(stream).await.map_err(|e| e.into())
-                }
-            },
-            shutdown_rx,
-        )
-        .await;
-
-    debug!(socket = %socket_path.display(), "Server loop finished");
-
-    result.map_err(|e| e.into())
-}
-
