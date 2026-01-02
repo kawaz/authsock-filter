@@ -305,7 +305,24 @@ fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
                 })
                 .collect();
         }
-        // Other filter types - no value completion yet
+        // keyfile= and -keyfile= need path completion
+        if let Some(path_prefix) = current.strip_prefix("keyfile=") {
+            return complete_path(path_prefix)
+                .into_iter()
+                .map(|c| {
+                    CompletionCandidate::new(format!("keyfile={}", c.get_value().to_string_lossy()))
+                })
+                .collect();
+        }
+        if let Some(path_prefix) = current.strip_prefix("-keyfile=") {
+            return complete_path(path_prefix)
+                .into_iter()
+                .map(|c| {
+                    CompletionCandidate::new(format!("-keyfile={}", c.get_value().to_string_lossy()))
+                })
+                .collect();
+        }
+        // Other filter types - no value completion
         return vec![];
     }
 
