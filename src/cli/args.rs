@@ -36,7 +36,7 @@ pub struct RunArgs {
     /// Examples:
     ///   --socket /tmp/work.sock comment=*@work* type=ed25519
     ///   --socket /tmp/github.sock github=kawaz --logging true
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
     /// Foreground mode (don't daemonize) - always true for `run`
@@ -64,7 +64,7 @@ pub struct StartArgs {
     pub log: Option<PathBuf>,
 
     /// Socket definition with filters and options
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
     /// PID file path
@@ -159,7 +159,7 @@ pub struct RegisterArgs {
     pub upstream: Option<PathBuf>,
 
     /// Socket definition with filters and options
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 }
 

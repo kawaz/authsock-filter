@@ -210,7 +210,12 @@ authsock-filter completion fish | source
 
 - [x] Dynamic shell completion using `CompleteEnv` (clap_complete unstable-dynamic)
   - Binary-as-completion-engine for minimal shell memory footprint
-- [ ] Custom completion for `--socket` inline filters
+- [x] Custom completion for `--socket` inline filters
+  - Filter type completion (comment=, fingerprint=, github=, type=, etc.)
+  - Negation filter completion (-type=, -comment=, etc.)
+  - Key type value completion for type= and -type=
+  - Path completion for socket paths
+  - Known issue: -type= shows extra candidates (-h, -V) due to clap option parsing
 - [ ] Socket-specific options (`--logging`, `--mode`, etc.)
 - [ ] Unify config file filter format with CLI (`type=value` style)
 - [ ] Register to mise registry for `mise use authsock-filter` support
