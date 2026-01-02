@@ -218,16 +218,16 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
     while let Some(arg) = iter.next() {
         if arg == "--upstream" || arg.starts_with("--upstream=") {
             // Save current socket to current group if any
-            if let Some(spec) = current_socket.take() {
-                if let Some(ref mut group) = current_group {
-                    group.sockets.push(spec);
-                }
+            if let Some(spec) = current_socket.take()
+                && let Some(ref mut group) = current_group
+            {
+                group.sockets.push(spec);
             }
             // Save current group if any
-            if let Some(group) = current_group.take() {
-                if !group.sockets.is_empty() {
-                    groups.push(group);
-                }
+            if let Some(group) = current_group.take()
+                && !group.sockets.is_empty()
+            {
+                groups.push(group);
             }
 
             // Get upstream path
@@ -245,10 +245,10 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
             }
         } else if arg == "--socket" || arg.starts_with("--socket=") {
             // Save previous socket if any
-            if let Some(spec) = current_socket.take() {
-                if let Some(ref mut group) = current_group {
-                    group.sockets.push(spec);
-                }
+            if let Some(spec) = current_socket.take()
+                && let Some(ref mut group) = current_group
+            {
+                group.sockets.push(spec);
             }
 
             // Get socket path
@@ -260,13 +260,13 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
 
             if let Some(path) = path {
                 // If no upstream yet, create default from SSH_AUTH_SOCK
-                if current_group.is_none() {
-                    if let Ok(ssh_auth_sock) = std::env::var("SSH_AUTH_SOCK") {
-                        current_group = Some(UpstreamGroup {
-                            path: PathBuf::from(ssh_auth_sock),
-                            sockets: Vec::new(),
-                        });
-                    }
+                if current_group.is_none()
+                    && let Ok(ssh_auth_sock) = std::env::var("SSH_AUTH_SOCK")
+                {
+                    current_group = Some(UpstreamGroup {
+                        path: PathBuf::from(ssh_auth_sock),
+                        sockets: Vec::new(),
+                    });
                 }
 
                 current_socket = Some(SocketSpec {
@@ -308,17 +308,17 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
     }
 
     // Save last socket to current group
-    if let Some(spec) = current_socket {
-        if let Some(ref mut group) = current_group {
-            group.sockets.push(spec);
-        }
+    if let Some(spec) = current_socket
+        && let Some(ref mut group) = current_group
+    {
+        group.sockets.push(spec);
     }
 
     // Save last group
-    if let Some(group) = current_group {
-        if !group.sockets.is_empty() {
-            groups.push(group);
-        }
+    if let Some(group) = current_group
+        && !group.sockets.is_empty()
+    {
+        groups.push(group);
     }
 
     groups

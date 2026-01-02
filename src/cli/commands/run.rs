@@ -109,11 +109,11 @@ pub async fn execute(args: RunArgs) -> Result<()> {
             }
 
             // Ensure parent directory exists
-            if let Some(parent) = spec.path.parent() {
-                if !parent.exists() {
-                    std::fs::create_dir_all(parent)
-                        .context(format!("Failed to create directory {}", parent.display()))?;
-                }
+            if let Some(parent) = spec.path.parent()
+                && !parent.exists()
+            {
+                std::fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory {}", parent.display()))?;
             }
 
             // Bind listener
@@ -172,10 +172,10 @@ pub async fn execute(args: RunArgs) -> Result<()> {
 
     // Clean up socket files and log server stop
     for (path, path_str) in listeners {
-        if let Some(ref log) = logger {
-            if let Err(e) = log.write(&LogEvent::server_stop(&path_str)) {
-                warn!(error = %e, "Failed to write server stop log");
-            }
+        if let Some(ref log) = logger
+            && let Err(e) = log.write(&LogEvent::server_stop(&path_str))
+        {
+            warn!(error = %e, "Failed to write server stop log");
         }
 
         if path.exists() {

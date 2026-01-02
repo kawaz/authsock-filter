@@ -66,13 +66,13 @@ impl Daemon {
     /// and creates a PID file.
     pub fn start(&self, args: &[String]) -> Result<u32> {
         // Check if already running
-        if let Ok(status) = self.status() {
-            if status.running {
-                return Err(Error::Daemon(format!(
-                    "Daemon is already running with PID {}",
-                    status.pid.unwrap_or(0)
-                )));
-            }
+        if let Ok(status) = self.status()
+            && status.running
+        {
+            return Err(Error::Daemon(format!(
+                "Daemon is already running with PID {}",
+                status.pid.unwrap_or(0)
+            )));
         }
 
         // Ensure PID file directory exists

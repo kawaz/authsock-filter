@@ -97,10 +97,10 @@ impl GitHubKeysMatcher {
 
     /// Check if cache is valid
     pub fn is_cache_valid(&self) -> bool {
-        if let Ok(cache_time) = self.cache_time.read() {
-            if let Some(time) = *cache_time {
-                return time.elapsed() < self.cache_ttl;
-            }
+        if let Ok(cache_time) = self.cache_time.read()
+            && let Some(time) = *cache_time
+        {
+            return time.elapsed() < self.cache_ttl;
         }
         false
     }

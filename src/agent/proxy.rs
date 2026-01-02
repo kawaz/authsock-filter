@@ -85,10 +85,10 @@ impl Proxy {
 
     /// Log an event if logger is configured
     fn log(&self, event: LogEvent) {
-        if let Some(ref logger) = self.logger {
-            if let Err(e) = logger.write(&event) {
-                warn!(error = %e, "Failed to write log event");
-            }
+        if let Some(ref logger) = self.logger
+            && let Err(e) = logger.write(&event)
+        {
+            warn!(error = %e, "Failed to write log event");
         }
     }
 

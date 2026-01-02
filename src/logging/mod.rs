@@ -143,10 +143,10 @@ impl LogGuard {
 
     /// Write a log event to the JSONL file
     pub fn log_event(&self, event: &LogEvent) {
-        if let Some(writer) = &self._jsonl_writer {
-            if let Err(e) = writer.write(event) {
-                tracing::warn!("Failed to write JSONL log event: {}", e);
-            }
+        if let Some(writer) = &self._jsonl_writer
+            && let Err(e) = writer.write(event)
+        {
+            tracing::warn!("Failed to write JSONL log event: {}", e);
         }
     }
 }

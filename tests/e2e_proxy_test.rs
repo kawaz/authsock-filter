@@ -114,7 +114,7 @@ async fn test_proxy_filters_by_comment() {
 
     // Create filter: only allow work keys
     let filter = FilterEvaluator::parse(&["comment=*@work*".to_string()]).unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server
@@ -150,7 +150,7 @@ async fn test_proxy_filters_by_negation() {
 
     // Create filter: exclude work keys
     let filter = FilterEvaluator::parse(&["-comment=*@work*".to_string()]).unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server
@@ -182,7 +182,7 @@ async fn test_proxy_filters_empty_allows_all() {
 
     // Create empty filter (should allow all)
     let filter = FilterEvaluator::parse(&[]).unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server
@@ -215,7 +215,7 @@ async fn test_proxy_filters_multiple_rules() {
     let filter =
         FilterEvaluator::parse(&["comment=*@work*".to_string(), "-comment=dev@*".to_string()])
             .unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server
@@ -250,7 +250,7 @@ async fn test_proxy_filters_by_fingerprint() {
 
     // Create filter: only allow specific fingerprint (auto-detected)
     let filter = FilterEvaluator::parse(&[fingerprint]).unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server
@@ -281,7 +281,7 @@ async fn test_proxy_filters_by_key_type() {
 
     // Create filter: only allow ed25519
     let filter = FilterEvaluator::parse(&["type=ed25519".to_string()]).unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server
@@ -311,7 +311,7 @@ async fn test_proxy_excludes_by_key_type() {
 
     // Create filter: exclude ed25519 (should return nothing)
     let filter = FilterEvaluator::parse(&["-type=ed25519".to_string()]).unwrap();
-    let upstream = Upstream::new(upstream_path.to_str().unwrap().to_string());
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
     // Start proxy server

@@ -53,16 +53,16 @@ impl Server {
         }
 
         // Ensure parent directory exists
-        if let Some(parent) = self.socket_path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    Error::Socket(format!(
-                        "Failed to create parent directory {}: {}",
-                        parent.display(),
-                        e
-                    ))
-                })?;
-            }
+        if let Some(parent) = self.socket_path.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::Socket(format!(
+                    "Failed to create parent directory {}: {}",
+                    parent.display(),
+                    e
+                ))
+            })?;
         }
 
         // Create the listener
