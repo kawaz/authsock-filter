@@ -3,7 +3,7 @@
 //! This module implements the core proxy functionality that filters
 //! SSH agent requests between a client and the upstream agent.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::filter::FilterEvaluator;
 use crate::protocol::{AgentCodec, AgentMessage, Identity, MessageType};
 use std::collections::HashSet;
@@ -157,8 +157,6 @@ impl Proxy {
     /// Only allows signing with keys that are in the allowed set
     /// (i.e., keys that passed the filter in a previous REQUEST_IDENTITIES).
     async fn handle_sign_request(&self, request: AgentMessage) -> Result<AgentMessage> {
-        debug!("Handling SIGN_REQUEST");
-
         // Parse the key blob from the request
         let key_blob = match request.parse_sign_request_key() {
             Ok(blob) => blob,
@@ -168,35 +166,16 @@ impl Proxy {
             }
         };
 
-        // Check if this key is allowed
+        // Check if this key is in the allowed set
         let allowed = self.allowed_keys.read().await;
         if !allowed.contains(key_blob.as_ref()) {
-            // Key not allowed, try to create identity and check filter
-            // This handles the case where a client requests signing without
-            // first requesting identities
-            let identity = Identity::new(key_blob.clone(), String::new());
-            if !self.filter.matches(&identity) {
-                info!(
-                    fingerprint = ?identity.fingerprint(),
-                    "Sign request denied: key not allowed by filter"
-                );
-                return Ok(AgentMessage::failure());
-            }
+            debug!("Sign request denied: key not in allowed set");
+            return Ok(AgentMessage::failure());
         }
         drop(allowed);
 
-        // Key is allowed, forward to upstream
-        let response = self.forward_to_upstream(request).await?;
-
-        if response.msg_type == MessageType::SignResponse {
-            let identity = Identity::new(key_blob, String::new());
-            debug!(
-                fingerprint = ?identity.fingerprint(),
-                "Sign request succeeded"
-            );
-        }
-
-        Ok(response)
+        // Forward to upstream
+        self.forward_to_upstream(request).await
     }
 
     /// Forward a message to the upstream agent
@@ -206,86 +185,9 @@ impl Proxy {
     }
 }
 
-/// Builder for creating a Proxy with optional configuration
-#[allow(dead_code)]
-pub struct ProxyBuilder {
-    upstream: Option<Upstream>,
-    filter: FilterEvaluator,
-}
-
-#[allow(dead_code)]
-impl ProxyBuilder {
-    /// Create a new proxy builder
-    pub fn new() -> Self {
-        Self {
-            upstream: None,
-            filter: FilterEvaluator::default(),
-        }
-    }
-
-    /// Set the upstream agent connection
-    pub fn upstream(mut self, upstream: Upstream) -> Self {
-        self.upstream = Some(upstream);
-        self
-    }
-
-    /// Set the upstream from SSH_AUTH_SOCK
-    pub fn upstream_from_env(mut self) -> Result<Self> {
-        self.upstream = Some(Upstream::from_env()?);
-        Ok(self)
-    }
-
-    /// Set the filter evaluator
-    pub fn filter(mut self, filter: FilterEvaluator) -> Self {
-        self.filter = filter;
-        self
-    }
-
-    /// Parse filter strings and set the evaluator
-    pub fn filter_strs(mut self, filter_strs: &[String]) -> Result<Self> {
-        self.filter = FilterEvaluator::parse(filter_strs)?;
-        Ok(self)
-    }
-
-    /// Build the proxy
-    pub fn build(self) -> Result<Proxy> {
-        let upstream = self
-            .upstream
-            .ok_or_else(|| Error::Config("Upstream agent not configured".to_string()))?;
-
-        Ok(Proxy::new(upstream, self.filter))
-    }
-}
-
-impl Default for ProxyBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_proxy_builder() {
-        let upstream = Upstream::new("/tmp/test.sock");
-        let filter = FilterEvaluator::default();
-
-        let proxy = ProxyBuilder::new()
-            .upstream(upstream)
-            .filter(filter)
-            .build()
-            .unwrap();
-
-        assert!(proxy.filter().is_empty());
-    }
-
-    #[test]
-    fn test_proxy_builder_missing_upstream() {
-        let result = ProxyBuilder::new().build();
-        assert!(result.is_err());
-    }
 
     #[tokio::test]
     async fn test_allowed_keys_cache() {
