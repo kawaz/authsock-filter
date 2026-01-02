@@ -322,6 +322,15 @@ fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
                 })
                 .collect();
         }
+        // pubkey= suggests quoted template
+        if current == "pubkey=" {
+            return vec![CompletionCandidate::new("pubkey=\"\"")
+                .help(Some("Enter full public key in quotes".into()))];
+        }
+        if current == "-pubkey=" {
+            return vec![CompletionCandidate::new("-pubkey=\"\"")
+                .help(Some("Enter full public key to exclude".into()))];
+        }
         // Other filter types - no value completion
         return vec![];
     }
