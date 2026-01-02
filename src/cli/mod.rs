@@ -18,7 +18,15 @@ use args::{
 #[command(name = "authsock-filter")]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
+#[command(disable_help_flag = true, disable_version_flag = true)]
 pub struct Cli {
+    /// Print help
+    #[arg(long, action = clap::ArgAction::Help, global = true)]
+    help: Option<bool>,
+
+    /// Print version
+    #[arg(long, action = clap::ArgAction::Version, global = true)]
+    version: Option<bool>,
     /// Configuration file path
     #[arg(long, global = true, env = "AUTHSOCK_FILTER_CONFIG")]
     pub config: Option<PathBuf>,
