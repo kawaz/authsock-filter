@@ -1,6 +1,7 @@
 //! Argument structures for CLI commands
 
 use clap::Args;
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use clap_complete::Shell;
 use std::path::PathBuf;
 
@@ -35,7 +36,7 @@ pub struct RunArgs {
     /// Examples:
     ///   --socket /tmp/work.sock comment=*@work* type=ed25519
     ///   --socket /tmp/github.sock github=kawaz --logging true
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]")]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
     /// Foreground mode (don't daemonize) - always true for `run`
@@ -63,7 +64,7 @@ pub struct StartArgs {
     pub log: Option<PathBuf>,
 
     /// Socket definition with filters and options
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]")]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
     /// PID file path
@@ -158,7 +159,7 @@ pub struct RegisterArgs {
     pub upstream: Option<PathBuf>,
 
     /// Socket definition with filters and options
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]")]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 }
 
@@ -256,4 +257,155 @@ pub fn parse_socket_specs_from_args() -> Vec<SocketSpec> {
     }
 
     specs
+}
+
+/// Filter types for completion
+const FILTER_TYPES: &[(&str, &str)] = &[
+    ("fingerprint=", "Match by key fingerprint (SHA256:xxx)"),
+    ("comment=", "Match by comment (glob or ~regex)"),
+    ("github=", "Match keys from github.com/username.keys"),
+    ("type=", "Match by key type (ed25519, rsa, ecdsa, dsa)"),
+    ("pubkey=", "Match by full public key"),
+    ("keyfile=", "Match keys from file"),
+    ("-fingerprint=", "Exclude by fingerprint"),
+    ("-comment=", "Exclude by comment"),
+    ("-github=", "Exclude GitHub user keys"),
+    ("-type=", "Exclude key type"),
+    ("-pubkey=", "Exclude by public key"),
+    ("-keyfile=", "Exclude keys from file"),
+];
+
+/// Key types for type= filter completion
+const KEY_TYPES: &[&str] = &["ed25519", "rsa", "ecdsa", "dsa"];
+
+/// Completer for --socket arguments
+fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let current = current.to_string_lossy();
+
+    // Check if this looks like a filter (contains = or starts with -)
+    if current.contains('=') {
+        // Already has type=, complete the value if it's type=
+        if let Some(prefix) = current.strip_prefix("type=") {
+            return KEY_TYPES
+                .iter()
+                .filter(|t| t.starts_with(prefix))
+                .map(|t| {
+                    CompletionCandidate::new(format!("type={}", t))
+                        .help(Some(format!("{} keys", t).into()))
+                })
+                .collect();
+        }
+        if let Some(prefix) = current.strip_prefix("-type=") {
+            return KEY_TYPES
+                .iter()
+                .filter(|t| t.starts_with(prefix))
+                .map(|t| {
+                    CompletionCandidate::new(format!("-type={}", t))
+                        .help(Some(format!("Exclude {} keys", t).into()))
+                })
+                .collect();
+        }
+        // Other filter types - no value completion yet
+        return vec![];
+    }
+
+    // Check if it starts with - (negation filter prefix)
+    if current.starts_with('-') && !current.starts_with("--") {
+        // Complete negation filters
+        return FILTER_TYPES
+            .iter()
+            .filter(|(name, _)| name.starts_with('-') && name.starts_with(current.as_ref()))
+            .map(|(name, help)| CompletionCandidate::new(*name).help(Some((*help).into())))
+            .collect();
+    }
+
+    // Check if it looks like a path (starts with / or ~ or .)
+    if current.starts_with('/') || current.starts_with('~') || current.starts_with('.') {
+        // Path completion
+        return complete_path(&current);
+    }
+
+    // Empty or partial input - show both paths and filters
+    if current.is_empty() {
+        // Show filter types as primary suggestions
+        return FILTER_TYPES
+            .iter()
+            .map(|(name, help)| CompletionCandidate::new(*name).help(Some((*help).into())))
+            .collect();
+    }
+
+    // Partial filter type
+    let mut candidates: Vec<CompletionCandidate> = FILTER_TYPES
+        .iter()
+        .filter(|(name, _)| name.starts_with(current.as_ref()))
+        .map(|(name, help)| CompletionCandidate::new(*name).help(Some((*help).into())))
+        .collect();
+
+    // Also try path completion if no filter matches
+    if candidates.is_empty() {
+        candidates = complete_path(&current);
+    }
+
+    candidates
+}
+
+/// Complete file paths
+fn complete_path(current: &str) -> Vec<CompletionCandidate> {
+    use std::fs;
+    use std::path::Path;
+
+    let path = if current.starts_with('~') {
+        if let Some(home) = dirs::home_dir() {
+            let rest = current.strip_prefix('~').unwrap_or("");
+            let rest = rest.strip_prefix('/').unwrap_or(rest);
+            home.join(rest)
+        } else {
+            PathBuf::from(current)
+        }
+    } else {
+        PathBuf::from(current)
+    };
+
+    let (dir, prefix) = if path.is_dir() {
+        (path.clone(), "")
+    } else {
+        (
+            path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+            path.file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(""),
+        )
+    };
+
+    let mut candidates = Vec::new();
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.starts_with(prefix) {
+                let full_path = entry.path();
+                let display = if current.starts_with('~') {
+                    if let Some(home) = dirs::home_dir() {
+                        if let Ok(rel) = full_path.strip_prefix(&home) {
+                            format!("~/{}", rel.display())
+                        } else {
+                            full_path.display().to_string()
+                        }
+                    } else {
+                        full_path.display().to_string()
+                    }
+                } else {
+                    full_path.display().to_string()
+                };
+                let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                let display = if is_dir {
+                    format!("{}/", display)
+                } else {
+                    display
+                };
+                candidates.push(CompletionCandidate::new(display));
+            }
+        }
+    }
+    candidates
 }
