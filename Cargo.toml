@@ -18,7 +18,7 @@ ssh-key = { version = "0.6", features = ["std"] }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
-clap_complete = "4"
+clap_complete = { version = "4", features = ["unstable-dynamic"] }
 
 # Configuration
 serde = { version = "1", features = ["derive"] }

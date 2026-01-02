@@ -28,7 +28,7 @@ Download the latest binary from [Releases](https://github.com/kawaz/authsock-fil
 
 ```bash
 # Create a filtered socket that only shows keys with "@work" in the comment
-authsock-filter run -s /tmp/work.sock:comment:*@work*
+authsock-filter run --socket /tmp/work.sock:comment:*@work*
 
 # Use the filtered socket
 SSH_AUTH_SOCK=/tmp/work.sock ssh user@work-server
@@ -52,10 +52,10 @@ Commands:
   completion  Generate shell completion scripts
 
 Options:
-  -c, --config <PATH>  Configuration file path
-  -v, --verbose        Increase verbosity
-  -q, --quiet          Decrease verbosity
-  -h, --help           Print help
+  --config <PATH>  Configuration file path
+  --verbose        Increase verbosity
+  --quiet          Decrease verbosity
+  --help           Print help
 ```
 
 ### Run Command Options
@@ -64,9 +64,9 @@ Options:
 authsock-filter run [OPTIONS]
 
 Options:
-  -u, --upstream <SOCKET>  Upstream agent socket [default: $SSH_AUTH_SOCK]
-      --log <PATH>         JSONL log output path
-  -s, --socket <SPEC>      Socket definition (repeatable)
+  --upstream <SOCKET>  Upstream agent socket [default: $SSH_AUTH_SOCK]
+  --log <PATH>         JSONL log output path
+  --socket <SPEC>      Socket definition (repeatable)
 ```
 
 ### Socket Definition Format
@@ -131,22 +131,22 @@ timeout = "10s"
 ```bash
 # Create separate sockets for work and personal use
 authsock-filter run \
-  -s ~/.ssh/work.sock:comment:*@work.example.com \
-  -s ~/.ssh/personal.sock:-comment:*@work.example.com
+  --socket ~/.ssh/work.sock:comment:*@work.example.com \
+  --socket ~/.ssh/personal.sock:-comment:*@work.example.com
 ```
 
 ### Only Modern Keys
 
 ```bash
 # Only allow ed25519 keys
-authsock-filter run -s /tmp/modern.sock:type:ed25519:-type:dsa:-type:rsa
+authsock-filter run --socket /tmp/modern.sock:type:ed25519:-type:dsa:-type:rsa
 ```
 
 ### GitHub Authorized Keys
 
 ```bash
 # Only allow keys registered with your GitHub account
-authsock-filter run -s /tmp/github.sock:github:kawaz
+authsock-filter run --socket /tmp/github.sock:github:kawaz
 ```
 
 ### Combining Filters
@@ -154,7 +154,7 @@ authsock-filter run -s /tmp/github.sock:github:kawaz
 ```bash
 # Work keys that are also ed25519
 authsock-filter run \
-  -s /tmp/work-ed25519.sock:comment:*@work*:type:ed25519
+  --socket /tmp/work-ed25519.sock:comment:*@work*:type:ed25519
 ```
 
 ## Environment Variables
@@ -208,6 +208,9 @@ authsock-filter completion fish | source
 
 ## TODO
 
+- [x] Dynamic shell completion using `CompleteEnv` (clap_complete unstable-dynamic)
+  - Binary-as-completion-engine for minimal shell memory footprint
+  - Custom completion for `-s` socket spec (path:filter_type:...)
 - [ ] Register to mise registry for `mise use authsock-filter` support
 
 ## License

@@ -20,15 +20,15 @@ use args::{
 #[command(propagate_version = true)]
 pub struct Cli {
     /// Configuration file path
-    #[arg(short, long, global = true, env = "AUTHSOCK_FILTER_CONFIG")]
+    #[arg(long, global = true, env = "AUTHSOCK_FILTER_CONFIG")]
     pub config: Option<PathBuf>,
 
     /// Enable verbose output
-    #[arg(short, long, global = true, conflicts_with = "quiet")]
+    #[arg(long, global = true, conflicts_with = "quiet")]
     pub verbose: bool,
 
     /// Suppress non-essential output
-    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    #[arg(long, global = true, conflicts_with = "verbose")]
     pub quiet: bool,
 
     /// Subcommand to execute

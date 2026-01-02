@@ -1,7 +1,9 @@
 //! Argument structures for CLI commands
 
 use clap::Args;
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter};
 use clap_complete::Shell;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 
 /// Arguments for the `run` command
@@ -10,7 +12,7 @@ pub struct RunArgs {
     /// Upstream SSH agent socket path
     ///
     /// Defaults to the value of SSH_AUTH_SOCK environment variable
-    #[arg(short, long, env = "SSH_AUTH_SOCK")]
+    #[arg(long, env = "SSH_AUTH_SOCK")]
     pub upstream: Option<PathBuf>,
 
     /// Path to JSONL log file
@@ -22,9 +24,9 @@ pub struct RunArgs {
     /// Format: /path/to/socket.sock:filter1:filter2...
     ///
     /// Examples:
-    ///   -s /tmp/filtered.sock:fingerprint:SHA256:xxx
-    ///   -s /tmp/github.sock:github:kawaz
-    #[arg(short, long = "socket", value_name = "SPEC")]
+    ///   --socket /tmp/filtered.sock:fingerprint:SHA256:xxx
+    ///   --socket /tmp/github.sock:github:kawaz
+    #[arg(long = "socket", value_name = "SPEC", add = ArgValueCompleter::new(socket_spec_completer))]
     pub sockets: Vec<String>,
 
     /// Foreground mode (don't daemonize) - always true for `run`
@@ -36,7 +38,7 @@ pub struct RunArgs {
 #[derive(Args, Debug, Clone)]
 pub struct StartArgs {
     /// Upstream SSH agent socket path
-    #[arg(short, long, env = "SSH_AUTH_SOCK")]
+    #[arg(long, env = "SSH_AUTH_SOCK")]
     pub upstream: Option<PathBuf>,
 
     /// Path to JSONL log file
@@ -44,7 +46,7 @@ pub struct StartArgs {
     pub log: Option<PathBuf>,
 
     /// Socket definitions (repeatable)
-    #[arg(short, long = "socket", value_name = "SPEC")]
+    #[arg(long = "socket", value_name = "SPEC", add = ArgValueCompleter::new(socket_spec_completer))]
     pub sockets: Vec<String>,
 
     /// PID file path
@@ -60,11 +62,11 @@ pub struct StopArgs {
     pub pid_file: Option<PathBuf>,
 
     /// Force stop without waiting
-    #[arg(short, long)]
+    #[arg(long)]
     pub force: bool,
 
     /// Timeout in seconds for graceful shutdown
-    #[arg(short, long, default_value = "10")]
+    #[arg(long, default_value = "10")]
     pub timeout: u64,
 }
 
@@ -76,7 +78,7 @@ pub struct StatusArgs {
     pub pid_file: Option<PathBuf>,
 
     /// Output format
-    #[arg(short, long, default_value = "text", value_parser = ["text", "json"])]
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
     pub format: String,
 }
 
@@ -92,7 +94,7 @@ pub struct ConfigArgs {
     pub show_default: bool,
 
     /// Output format
-    #[arg(short, long, default_value = "toml", value_parser = ["toml", "json"])]
+    #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
     pub format: String,
 }
 
@@ -100,7 +102,7 @@ pub struct ConfigArgs {
 #[derive(Args, Debug, Clone)]
 pub struct UpgradeArgs {
     /// Force upgrade even if already at target version
-    #[arg(short, long)]
+    #[arg(long)]
     pub force: bool,
 
     /// Check for updates only, don't install
@@ -108,7 +110,7 @@ pub struct UpgradeArgs {
     pub check: bool,
 
     /// Skip confirmation prompt
-    #[arg(short, long)]
+    #[arg(long)]
     pub yes: bool,
 }
 
@@ -128,11 +130,11 @@ pub struct RegisterArgs {
     pub enable: bool,
 
     /// Upstream SSH agent socket path for service
-    #[arg(short, long)]
+    #[arg(long)]
     pub upstream: Option<PathBuf>,
 
     /// Socket definitions for service
-    #[arg(short, long = "socket", value_name = "SPEC")]
+    #[arg(long = "socket", value_name = "SPEC", add = ArgValueCompleter::new(socket_spec_completer))]
     pub sockets: Vec<String>,
 }
 
@@ -154,4 +156,49 @@ pub struct CompletionArgs {
     /// Shell to generate completions for
     #[arg(value_enum)]
     pub shell: Shell,
+}
+
+/// Filter types for socket spec completion
+const FILTER_TYPES: &[(&str, &str)] = &[
+    ("fingerprint:", "Filter by key fingerprint (SHA256:...)"),
+    ("comment:", "Filter by key comment (glob/regex)"),
+    ("github:", "Filter by GitHub username's keys"),
+    ("type:", "Filter by key type (ed25519/rsa/ecdsa/dsa)"),
+    ("pubkey:", "Filter by public key"),
+    ("keyfile:", "Filter by keys in authorized_keys file"),
+    ("-fingerprint:", "Exclude by fingerprint"),
+    ("-comment:", "Exclude by comment"),
+    ("-github:", "Exclude GitHub user's keys"),
+    ("-type:", "Exclude by key type"),
+    ("-pubkey:", "Exclude by public key"),
+    ("-keyfile:", "Exclude keys in file"),
+];
+
+/// Custom completer for socket spec (-s option)
+///
+/// Completes:
+/// - Path when no `:` present
+/// - Filter types after `path:`
+fn socket_spec_completer(current: &OsStr) -> Vec<CompletionCandidate> {
+    let Some(current_str) = current.to_str() else {
+        return vec![];
+    };
+
+    // Find the last `:` to determine context
+    if let Some(colon_pos) = current_str.rfind(':') {
+        let prefix = &current_str[..=colon_pos];
+        let partial = &current_str[colon_pos + 1..];
+
+        // After a colon, suggest filter types
+        FILTER_TYPES
+            .iter()
+            .filter(|(name, _)| name.starts_with(partial))
+            .map(|(name, help)| {
+                CompletionCandidate::new(format!("{}{}", prefix, name)).help(Some((*help).into()))
+            })
+            .collect()
+    } else {
+        // No colon yet - complete as file path
+        PathCompleter::any().complete(current)
+    }
 }

@@ -1,12 +1,16 @@
 //! authsock-filter - SSH agent proxy with filtering and logging
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::env::CompleteEnv;
 
 use authsock_filter::cli::{Cli, Commands};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Handle dynamic shell completion if COMPLETE env var is set
+    CompleteEnv::with_factory(Cli::command).complete();
+
     let cli = Cli::parse();
 
     // Initialize logging
