@@ -64,6 +64,34 @@ impl From<MessageType> for u8 {
     }
 }
 
+impl MessageType {
+    /// Get the message type name as a string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            // Client requests (SSH_AGENTC_*)
+            MessageType::RequestIdentities => "SSH_AGENTC_REQUEST_IDENTITIES",
+            MessageType::SignRequest => "SSH_AGENTC_SIGN_REQUEST",
+            MessageType::AddIdentity => "SSH_AGENTC_ADD_IDENTITY",
+            MessageType::RemoveIdentity => "SSH_AGENTC_REMOVE_IDENTITY",
+            MessageType::RemoveAllIdentities => "SSH_AGENTC_REMOVE_ALL_IDENTITIES",
+            MessageType::AddIdConstrained => "SSH_AGENTC_ADD_ID_CONSTRAINED",
+            MessageType::AddSmartcardKey => "SSH_AGENTC_ADD_SMARTCARD_KEY",
+            MessageType::RemoveSmartcardKey => "SSH_AGENTC_REMOVE_SMARTCARD_KEY",
+            MessageType::Lock => "SSH_AGENTC_LOCK",
+            MessageType::Unlock => "SSH_AGENTC_UNLOCK",
+            MessageType::AddSmartcardKeyConstrained => "SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED",
+            MessageType::Extension => "SSH_AGENTC_EXTENSION",
+            // Agent responses (SSH_AGENT_*)
+            MessageType::Failure => "SSH_AGENT_FAILURE",
+            MessageType::Success => "SSH_AGENT_SUCCESS",
+            MessageType::IdentitiesAnswer => "SSH_AGENT_IDENTITIES_ANSWER",
+            MessageType::SignResponse => "SSH_AGENT_SIGN_RESPONSE",
+            MessageType::ExtensionFailure => "SSH_AGENT_EXTENSION_FAILURE",
+            MessageType::Unknown => "UNKNOWN",
+        }
+    }
+}
+
 /// An SSH key identity from the agent
 #[derive(Debug, Clone)]
 pub struct Identity {

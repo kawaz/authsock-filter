@@ -1,6 +1,6 @@
 [package]
 name = "authsock-filter"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 description = "SSH agent proxy with filtering and logging"
 license = "MIT"
@@ -42,6 +42,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Byte manipulation
 bytes = "1"
+
+# Base64 encoding
+base64 = "0.22"
 
 # Async utilities
 futures = "0.3"

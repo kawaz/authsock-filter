@@ -5,8 +5,12 @@
 
 use crate::error::Result;
 use crate::filter::FilterEvaluator;
-use crate::logging::jsonl::{Decision, JsonlWriter, LogEvent};
+use crate::logging::jsonl::{
+    AgentMsgContent, Decision, IdentityInfo, JsonlWriter, LogEvent, MessageDirection,
+};
 use crate::protocol::{AgentCodec, AgentMessage, Identity, MessageType};
+use base64::Engine;
+use bytes::Buf;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,6 +34,9 @@ pub struct Proxy {
     logger: Option<Arc<JsonlWriter>>,
     /// Connection counter for client IDs
     connection_counter: AtomicU64,
+    /// Verbosity level for agent message logging
+    /// 0: no agent_msg, 1: message only, 2+: message + message_raw
+    verbosity: i8,
 }
 
 impl Proxy {
@@ -46,6 +53,7 @@ impl Proxy {
             socket_path: String::new(),
             logger: None,
             connection_counter: AtomicU64::new(0),
+            verbosity: 0,
         }
     }
 
@@ -58,6 +66,7 @@ impl Proxy {
             socket_path: String::new(),
             logger: None,
             connection_counter: AtomicU64::new(0),
+            verbosity: 0,
         }
     }
 
@@ -70,6 +79,13 @@ impl Proxy {
     /// Set the JSONL logger
     pub fn with_logger(mut self, logger: Arc<JsonlWriter>) -> Self {
         self.logger = Some(logger);
+        self
+    }
+
+    /// Set the verbosity level for agent message logging
+    /// 0: no agent_msg, 1: message only, 2+: message + message_raw
+    pub fn with_verbosity(mut self, verbosity: i8) -> Self {
+        self.verbosity = verbosity;
         self
     }
 
@@ -89,6 +105,121 @@ impl Proxy {
             && let Err(e) = logger.write(&event)
         {
             warn!(error = %e, "Failed to write log event");
+        }
+    }
+
+    /// Log an agent message
+    /// Only logs if verbosity >= 1 (DEBUG level)
+    /// Includes message_raw only if verbosity >= 2 (TRACE level)
+    fn log_agent_msg(&self, msg: &AgentMessage, direction: MessageDirection, client_id: &str) {
+        // verbosity 0: no agent_msg logging
+        if self.verbosity < 1 {
+            return;
+        }
+
+        let msg_type_byte: u8 = msg.msg_type.into();
+        let msg_name = msg.msg_type.as_str();
+
+        // Build parsed message content based on message type
+        let message_content = self.parse_message_content(msg, msg_type_byte, msg_name);
+
+        let upstream_path = self.upstream.socket_path().to_string_lossy().to_string();
+
+        let mut event = LogEvent::agent_msg(direction, message_content)
+            .with_socket(&self.socket_path)
+            .with_client_id(client_id)
+            .with_upstream(&upstream_path);
+
+        // verbosity >= 2: include message_raw (TRACE level)
+        if self.verbosity >= 2 {
+            let mut raw_bytes = vec![msg_type_byte];
+            raw_bytes.extend_from_slice(&msg.payload);
+            let raw = base64::engine::general_purpose::STANDARD.encode(&raw_bytes);
+            event = event.with_message_raw(raw);
+        }
+
+        self.log(event);
+    }
+
+    /// Parse message content for logging based on message type
+    fn parse_message_content(
+        &self,
+        msg: &AgentMessage,
+        msg_type: u8,
+        msg_name: &str,
+    ) -> AgentMsgContent {
+        let base = AgentMsgContent::new(msg_type, msg_name);
+
+        match msg.msg_type {
+            MessageType::IdentitiesAnswer => {
+                // Parse identities from response
+                if let Ok(identities) = msg.parse_identities() {
+                    let identity_infos: Vec<IdentityInfo> = identities
+                        .iter()
+                        .map(|id| IdentityInfo {
+                            fingerprint: id
+                                .fingerprint()
+                                .map(|f| f.to_string())
+                                .unwrap_or_default(),
+                            comment: id.comment.clone(),
+                            key_type: id.key_type().unwrap_or_default(),
+                        })
+                        .collect();
+                    base.with_identities(identity_infos)
+                } else {
+                    base
+                }
+            }
+            MessageType::SignRequest => {
+                // Parse sign request fields
+                let mut buf = &msg.payload[..];
+                if buf.remaining() >= 4 {
+                    let key_len = buf.get_u32() as usize;
+                    if buf.remaining() >= key_len {
+                        let key_blob = &buf[..key_len];
+                        buf.advance(key_len);
+
+                        // Get fingerprint from key blob
+                        let identity =
+                            Identity::new(bytes::Bytes::copy_from_slice(key_blob), String::new());
+                        let fingerprint = identity
+                            .fingerprint()
+                            .map(|f| f.to_string())
+                            .unwrap_or_default();
+
+                        // Parse data length
+                        let data_len = if buf.remaining() >= 4 {
+                            let len = buf.get_u32();
+                            buf.advance(len as usize);
+                            len
+                        } else {
+                            0
+                        };
+
+                        // Parse flags
+                        let flags = if buf.remaining() >= 4 {
+                            buf.get_u32()
+                        } else {
+                            0
+                        };
+
+                        return base.with_sign_request(fingerprint, data_len, flags);
+                    }
+                }
+                base
+            }
+            MessageType::SignResponse => {
+                // Parse signature length
+                let mut buf = &msg.payload[..];
+                if buf.remaining() >= 4 {
+                    let sig_len = buf.get_u32();
+                    base.with_sign_response(sig_len)
+                } else {
+                    base
+                }
+            }
+            // For other message types, just return the base info
+            _ => base,
         }
     }
 
@@ -156,7 +287,7 @@ impl Proxy {
             MessageType::SignRequest => self.handle_sign_request(request, client_id).await,
             _ => {
                 // Pass through other messages
-                self.forward_to_upstream(request).await
+                self.forward_to_upstream(request, client_id).await
             }
         }
     }
@@ -173,7 +304,7 @@ impl Proxy {
         debug!("Handling REQUEST_IDENTITIES");
 
         // Forward to upstream
-        let response = self.forward_to_upstream(request).await?;
+        let response = self.forward_to_upstream(request, client_id).await?;
 
         // Only process if we got an IdentitiesAnswer
         if response.msg_type != MessageType::IdentitiesAnswer {
@@ -232,7 +363,7 @@ impl Proxy {
         // Log identities response summary
         self.log(
             LogEvent::new(crate::logging::jsonl::LogEventKind::IdentitiesResponse)
-                .with_socket_name(&self.socket_path)
+                .with_socket(&self.socket_path)
                 .with_client_id(client_id)
                 .with_key_count(filtered_count as u32)
                 .with_filtered_count((original_count - filtered_count) as u32),
@@ -279,7 +410,7 @@ impl Proxy {
         // Log sign request
         self.log(
             LogEvent::new(crate::logging::jsonl::LogEventKind::SignRequest)
-                .with_socket_name(&self.socket_path)
+                .with_socket(&self.socket_path)
                 .with_client_id(client_id)
                 .with_fingerprint(&fingerprint),
         );
@@ -298,7 +429,7 @@ impl Proxy {
         drop(allowed);
 
         // Forward to upstream
-        let response = self.forward_to_upstream(request).await?;
+        let response = self.forward_to_upstream(request, client_id).await?;
 
         // Log result
         let decision = if response.msg_type == MessageType::SignResponse {
@@ -315,9 +446,21 @@ impl Proxy {
     }
 
     /// Forward a message to the upstream agent
-    async fn forward_to_upstream(&self, request: AgentMessage) -> Result<AgentMessage> {
+    async fn forward_to_upstream(
+        &self,
+        request: AgentMessage,
+        client_id: &str,
+    ) -> Result<AgentMessage> {
+        // Log request
+        self.log_agent_msg(&request, MessageDirection::Request, client_id);
+
         let mut conn = self.upstream.connect().await?;
-        conn.send_receive(&request).await
+        let response = conn.send_receive(&request).await?;
+
+        // Log response
+        self.log_agent_msg(&response, MessageDirection::Response, client_id);
+
+        Ok(response)
     }
 }
 

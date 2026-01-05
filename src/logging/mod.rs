@@ -8,7 +8,9 @@
 
 pub mod jsonl;
 
-pub use jsonl::{Decision, JsonlWriter, LogEvent, LogEventKind};
+pub use jsonl::{
+    AgentMsgContent, Decision, IdentityInfo, JsonlWriter, LogEvent, LogEventKind, MessageDirection,
+};
 
 use std::path::Path;
 use tracing::Level;

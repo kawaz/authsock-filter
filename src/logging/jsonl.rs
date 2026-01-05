@@ -40,6 +40,8 @@ pub enum LogEventKind {
     ConfigReload,
     /// Error occurred
     Error,
+    /// SSH agent protocol message
+    AgentMsg,
 }
 
 impl std::fmt::Display for LogEventKind {
@@ -58,6 +60,7 @@ impl std::fmt::Display for LogEventKind {
             LogEventKind::ConfigLoad => write!(f, "config_load"),
             LogEventKind::ConfigReload => write!(f, "config_reload"),
             LogEventKind::Error => write!(f, "error"),
+            LogEventKind::AgentMsg => write!(f, "agent_msg"),
         }
     }
 }
@@ -70,6 +73,96 @@ pub enum Decision {
     Allowed,
     /// Request was denied
     Denied,
+}
+
+/// Message direction for agent protocol logging
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageDirection {
+    /// Request from client to agent
+    Request,
+    /// Response from agent to client
+    Response,
+}
+
+/// Identity information for logging
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityInfo {
+    /// SSH key fingerprint
+    pub fingerprint: String,
+    /// Key comment
+    pub comment: String,
+    /// Key type (e.g., "ssh-ed25519")
+    pub key_type: String,
+}
+
+/// SSH agent message content for logging
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMsgContent {
+    /// Message type number
+    #[serde(rename = "type")]
+    pub msg_type: u8,
+
+    /// Message type name
+    pub type_name: String,
+
+    // IdentitiesAnswer fields
+    /// List of identities (for IDENTITIES_ANSWER)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identities: Option<Vec<IdentityInfo>>,
+
+    // SignRequest fields
+    /// Key fingerprint (for SIGN_REQUEST)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+
+    /// Data length to sign (for SIGN_REQUEST)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_len: Option<u32>,
+
+    /// Signature flags (for SIGN_REQUEST)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<u32>,
+
+    // SignResponse fields
+    /// Signature length (for SIGN_RESPONSE)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_len: Option<u32>,
+}
+
+impl AgentMsgContent {
+    /// Create a new message content with just type info
+    pub fn new(msg_type: u8, type_name: impl Into<String>) -> Self {
+        Self {
+            msg_type,
+            type_name: type_name.into(),
+            identities: None,
+            fingerprint: None,
+            data_len: None,
+            flags: None,
+            signature_len: None,
+        }
+    }
+
+    /// Set identities answer fields
+    pub fn with_identities(mut self, identities: Vec<IdentityInfo>) -> Self {
+        self.identities = Some(identities);
+        self
+    }
+
+    /// Set sign request fields
+    pub fn with_sign_request(mut self, fingerprint: String, data_len: u32, flags: u32) -> Self {
+        self.fingerprint = Some(fingerprint);
+        self.data_len = Some(data_len);
+        self.flags = Some(flags);
+        self
+    }
+
+    /// Set sign response fields
+    pub fn with_sign_response(mut self, signature_len: u32) -> Self {
+        self.signature_len = Some(signature_len);
+        self
+    }
 }
 
 impl std::fmt::Display for Decision {
@@ -93,7 +186,7 @@ pub struct LogEvent {
 
     /// Socket name (the filtered socket path)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub socket_name: Option<String>,
+    pub socket: Option<String>,
 
     /// Client identifier (connection ID or peer info)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,6 +231,22 @@ pub struct LogEvent {
     /// Additional context as key-value pairs
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<serde_json::Value>,
+
+    /// Message direction (for agent_msg events)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direction: Option<MessageDirection>,
+
+    /// Parsed message content (for agent_msg events)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<AgentMsgContent>,
+
+    /// Raw message data in base64 (for agent_msg events)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_raw: Option<String>,
+
+    /// Upstream socket path (for multi-upstream environments)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream: Option<String>,
 }
 
 impl LogEvent {
@@ -146,7 +255,7 @@ impl LogEvent {
         Self {
             timestamp: Utc::now(),
             kind,
-            socket_name: None,
+            socket: None,
             client_id: None,
             fingerprint: None,
             comment: None,
@@ -158,12 +267,16 @@ impl LogEvent {
             filtered_count: None,
             error: None,
             context: None,
+            direction: None,
+            message: None,
+            message_raw: None,
+            upstream: None,
         }
     }
 
     /// Set the socket name
-    pub fn with_socket_name(mut self, name: impl Into<String>) -> Self {
-        self.socket_name = Some(name.into());
+    pub fn with_socket(mut self, name: impl Into<String>) -> Self {
+        self.socket = Some(name.into());
         self
     }
 
@@ -233,27 +346,51 @@ impl LogEvent {
         self
     }
 
+    /// Set the message direction
+    pub fn with_direction(mut self, direction: MessageDirection) -> Self {
+        self.direction = Some(direction);
+        self
+    }
+
+    /// Set the parsed message content
+    pub fn with_message(mut self, message: AgentMsgContent) -> Self {
+        self.message = Some(message);
+        self
+    }
+
+    /// Set the raw message data (base64 encoded)
+    pub fn with_message_raw(mut self, raw: impl Into<String>) -> Self {
+        self.message_raw = Some(raw.into());
+        self
+    }
+
+    /// Set the upstream socket path
+    pub fn with_upstream(mut self, upstream: impl Into<String>) -> Self {
+        self.upstream = Some(upstream.into());
+        self
+    }
+
     /// Create a server start event
     pub fn server_start(socket_path: impl Into<String>) -> Self {
-        Self::new(LogEventKind::ServerStart).with_socket_name(socket_path)
+        Self::new(LogEventKind::ServerStart).with_socket(socket_path)
     }
 
     /// Create a server stop event
     pub fn server_stop(socket_path: impl Into<String>) -> Self {
-        Self::new(LogEventKind::ServerStop).with_socket_name(socket_path)
+        Self::new(LogEventKind::ServerStop).with_socket(socket_path)
     }
 
     /// Create a client connect event
     pub fn client_connect(socket_path: impl Into<String>, client_id: impl Into<String>) -> Self {
         Self::new(LogEventKind::ClientConnect)
-            .with_socket_name(socket_path)
+            .with_socket(socket_path)
             .with_client_id(client_id)
     }
 
     /// Create a client disconnect event
     pub fn client_disconnect(socket_path: impl Into<String>, client_id: impl Into<String>) -> Self {
         Self::new(LogEventKind::ClientDisconnect)
-            .with_socket_name(socket_path)
+            .with_socket(socket_path)
             .with_client_id(client_id)
     }
 
@@ -264,7 +401,7 @@ impl LogEvent {
         comment: impl Into<String>,
     ) -> Self {
         Self::new(LogEventKind::SignRequest)
-            .with_socket_name(socket_path)
+            .with_socket(socket_path)
             .with_fingerprint(fingerprint)
             .with_comment(comment)
     }
@@ -276,7 +413,7 @@ impl LogEvent {
         decision: Decision,
     ) -> Self {
         Self::new(LogEventKind::SignResponse)
-            .with_socket_name(socket_path)
+            .with_socket(socket_path)
             .with_fingerprint(fingerprint)
             .with_decision(decision)
     }
@@ -289,7 +426,7 @@ impl LogEvent {
         reason: impl Into<String>,
     ) -> Self {
         Self::new(LogEventKind::KeyFiltered)
-            .with_socket_name(socket_path)
+            .with_socket(socket_path)
             .with_fingerprint(fingerprint)
             .with_comment(comment)
             .with_reason(reason)
@@ -302,7 +439,7 @@ impl LogEvent {
         comment: impl Into<String>,
     ) -> Self {
         Self::new(LogEventKind::KeyAllowed)
-            .with_socket_name(socket_path)
+            .with_socket(socket_path)
             .with_fingerprint(fingerprint)
             .with_comment(comment)
     }
@@ -310,6 +447,13 @@ impl LogEvent {
     /// Create an error event
     pub fn error(message: impl Into<String>) -> Self {
         Self::new(LogEventKind::Error).with_error(message)
+    }
+
+    /// Create an agent message event
+    pub fn agent_msg(direction: MessageDirection, message: AgentMsgContent) -> Self {
+        Self::new(LogEventKind::AgentMsg)
+            .with_direction(direction)
+            .with_message(message)
     }
 
     /// Serialize the event to a JSON string
@@ -380,19 +524,19 @@ mod tests {
     fn test_log_event_new() {
         let event = LogEvent::new(LogEventKind::ServerStart);
         assert_eq!(event.kind, LogEventKind::ServerStart);
-        assert!(event.socket_name.is_none());
+        assert!(event.socket.is_none());
     }
 
     #[test]
     fn test_log_event_builder() {
         let event = LogEvent::new(LogEventKind::SignRequest)
-            .with_socket_name("/tmp/test.sock")
+            .with_socket("/tmp/test.sock")
             .with_fingerprint("SHA256:abc123")
             .with_comment("test@example.com")
             .with_key_type("ssh-ed25519");
 
         assert_eq!(event.kind, LogEventKind::SignRequest);
-        assert_eq!(event.socket_name, Some("/tmp/test.sock".to_string()));
+        assert_eq!(event.socket, Some("/tmp/test.sock".to_string()));
         assert_eq!(event.fingerprint, Some("SHA256:abc123".to_string()));
         assert_eq!(event.comment, Some("test@example.com".to_string()));
         assert_eq!(event.key_type, Some("ssh-ed25519".to_string()));
@@ -404,7 +548,7 @@ mod tests {
         let json = event.to_json().unwrap();
 
         assert!(json.contains("\"kind\":\"server_start\""));
-        assert!(json.contains("\"socket_name\":\"/tmp/test.sock\""));
+        assert!(json.contains("\"socket\":\"/tmp/test.sock\""));
         assert!(json.contains("\"timestamp\":"));
     }
 
