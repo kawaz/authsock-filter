@@ -60,23 +60,26 @@ fn resolve_service_executable(
                 info.current_path.display()
             );
 
+            // Get current command args for suggestions
+            let args: Vec<String> = std::env::args().collect();
+            let cmd_args: Vec<&str> = args
+                .iter()
+                .skip(1)
+                .filter(|a| !a.starts_with("--executable") && !a.starts_with("--allow"))
+                .map(|s| s.as_str())
+                .collect();
+
+            // Suggest stable shim paths if available
             if !info.suggestions.is_empty() {
-                msg.push_str("\nRe-run using a stable path instead:\n");
+                msg.push_str("\n# Re-run using a stable path (recommended):\n");
                 for (shim_path, is_same) in &info.suggestions {
                     let same_note = if *is_same {
                         " (verified: same binary)"
                     } else {
                         ""
                     };
-                    let args: Vec<String> = std::env::args().collect();
-                    let cmd_args: Vec<&str> = args
-                        .iter()
-                        .skip(1)
-                        .filter(|a| !a.starts_with("--executable") && !a.starts_with("--allow"))
-                        .map(|s| s.as_str())
-                        .collect();
                     msg.push_str(&format!(
-                        "\n  {} {}{}\n",
+                        "  {} {}{}\n",
                         shim_path.display(),
                         cmd_args.join(" "),
                         same_note
@@ -84,7 +87,14 @@ fn resolve_service_executable(
                 }
             }
 
-            msg.push_str("\nTo proceed anyway, add: --allow-versioned-path");
+            // Always show the --allow-versioned-path option with full command
+            msg.push_str("\n# Or proceed with current version-specific path:\n");
+            msg.push_str(&format!(
+                "  {} --allow-versioned-path {}\n",
+                current_exe.display(),
+                cmd_args.join(" ")
+            ));
+
             bail!("{}", msg);
         }
     }

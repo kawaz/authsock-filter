@@ -54,13 +54,17 @@ fn find_shim_suggestions(current_exe: &Path) -> Vec<(PathBuf, bool)> {
 
     // Check common shim/bin locations
     let candidates = [
-        // mise shims
+        // mise shims (XDG_DATA_HOME or ~/.local/share)
+        dirs::home_dir().map(|d| d.join(".local/share/mise/shims/authsock-filter")),
+        // mise shims (alternative location on some systems)
         dirs::data_local_dir().map(|d| d.join("mise/shims/authsock-filter")),
+        // asdf shims
+        dirs::home_dir().map(|d| d.join(".asdf/shims/authsock-filter")),
         // ~/.local/bin (common user bin)
         dirs::home_dir().map(|d| d.join(".local/bin/authsock-filter")),
         // Homebrew
-        Some(PathBuf::from("/usr/local/bin/authsock-filter")),
         Some(PathBuf::from("/opt/homebrew/bin/authsock-filter")),
+        Some(PathBuf::from("/usr/local/bin/authsock-filter")),
     ];
 
     for candidate in candidates.into_iter().flatten() {
