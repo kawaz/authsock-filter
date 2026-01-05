@@ -1,4 +1,4 @@
-//! authsock-filter - SSH agent proxy with filtering and logging
+//! authsock-filter - SSH agent proxy with key filtering
 //!
 //! This library provides functionality to create filtered SSH agent sockets
 //! that proxy requests to an upstream SSH agent while applying configurable
@@ -9,9 +9,7 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod filter;
-pub mod logging;
 pub mod protocol;
-pub mod service;
 
 pub use error::{Error, Result};
 

@@ -1,8 +1,9 @@
-//! authsock-filter - SSH agent proxy with filtering and logging
+//! authsock-filter - SSH agent proxy with key filtering
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_complete::env::CompleteEnv;
+use tracing_subscriber::EnvFilter;
 
 use authsock_filter::cli::{Cli, Commands, ServiceCommand};
 
@@ -14,13 +15,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize logging
-    let _log_guard = authsock_filter::logging::init(cli.verbose, cli.quiet);
+    init_logging(cli.verbose, cli.quiet);
 
     match cli.command {
         Commands::Run(args) => authsock_filter::cli::commands::run::execute(args).await?,
         Commands::Config(args) => authsock_filter::cli::commands::config::execute(args).await?,
         Commands::Version => authsock_filter::cli::commands::version::execute().await?,
-        Commands::Upgrade(args) => authsock_filter::cli::commands::upgrade::execute(args).await?,
         Commands::Service { command } => match command {
             ServiceCommand::Register(args) => {
                 authsock_filter::cli::commands::service::register(args).await?
@@ -28,11 +28,6 @@ async fn main() -> Result<()> {
             ServiceCommand::Unregister(args) => {
                 authsock_filter::cli::commands::service::unregister(args).await?
             }
-            ServiceCommand::Start => authsock_filter::cli::commands::service::start().await?,
-            ServiceCommand::Stop => authsock_filter::cli::commands::service::stop().await?,
-            ServiceCommand::Status => authsock_filter::cli::commands::service::status().await?,
-            ServiceCommand::Enable => authsock_filter::cli::commands::service::enable().await?,
-            ServiceCommand::Disable => authsock_filter::cli::commands::service::disable().await?,
         },
         Commands::Completion(args) => {
             authsock_filter::cli::commands::completion::execute(args).await?
@@ -40,4 +35,23 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Initialize logging with tracing-subscriber
+fn init_logging(verbose: bool, quiet: bool) {
+    let filter = if verbose {
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("debug"))
+    } else if quiet {
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("error"))
+    } else {
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info"))
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
 }

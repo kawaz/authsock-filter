@@ -4,12 +4,11 @@ use anyhow::{Context, Result, bail};
 use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::signal;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::agent::{Proxy, Upstream};
 use crate::cli::args::RunArgs;
 use crate::filter::FilterEvaluator;
-use crate::logging::jsonl::{JsonlWriter, LogEvent};
 
 /// Execute the run command
 pub async fn execute(args: RunArgs) -> Result<()> {
@@ -47,19 +46,9 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         }
     }
 
-    // Set up JSONL logger if specified
-    let logger: Option<Arc<JsonlWriter>> = if let Some(log_path) = &args.log {
-        info!(log = %log_path.display(), "JSONL logging enabled");
-        let writer = JsonlWriter::new(log_path)
-            .context(format!("Failed to create log file: {}", log_path.display()))?;
-        Some(Arc::new(writer))
-    } else {
-        None
-    };
-
     // Start proxy servers for each upstream group
     let mut handles = Vec::new();
-    let mut listeners = Vec::new();
+    let mut socket_paths = Vec::new();
 
     for group in &upstream_groups {
         // Validate upstream socket exists
@@ -85,19 +74,11 @@ pub async fn execute(args: RunArgs) -> Result<()> {
 
             let socket_path_str = spec.path.to_string_lossy().to_string();
 
-            // Create proxy with optional logger
-            let mut proxy = Proxy::new_shared(upstream.clone(), Arc::new(filter))
-                .with_socket_path(&socket_path_str);
-
-            if let Some(ref log) = logger {
-                proxy = proxy.with_logger(log.clone());
-                // Log server start
-                if let Err(e) = log.write(&LogEvent::server_start(&socket_path_str)) {
-                    warn!(error = %e, "Failed to write server start log");
-                }
-            }
-
-            let proxy = Arc::new(proxy);
+            // Create proxy
+            let proxy = Arc::new(
+                Proxy::new_shared(upstream.clone(), Arc::new(filter))
+                    .with_socket_path(&socket_path_str),
+            );
 
             // Remove existing socket if present
             if spec.path.exists() {
@@ -126,8 +107,7 @@ pub async fn execute(args: RunArgs) -> Result<()> {
                 "Listening on socket"
             );
 
-            let socket_path = spec.path.clone();
-            listeners.push((socket_path.clone(), socket_path_str.clone()));
+            socket_paths.push(spec.path.clone());
 
             // Spawn task to handle connections
             let handle = tokio::spawn(async move {
@@ -170,17 +150,11 @@ pub async fn execute(args: RunArgs) -> Result<()> {
         handle.abort();
     }
 
-    // Clean up socket files and log server stop
-    for (path, path_str) in listeners {
-        if let Some(ref log) = logger
-            && let Err(e) = log.write(&LogEvent::server_stop(&path_str))
-        {
-            warn!(error = %e, "Failed to write server stop log");
-        }
-
+    // Clean up socket files
+    for path in socket_paths {
         if path.exists() {
             if let Err(e) = std::fs::remove_file(&path) {
-                warn!(path = %path.display(), error = %e, "Failed to remove socket file");
+                debug!(path = %path.display(), error = %e, "Failed to remove socket file");
             } else {
                 debug!(path = %path.display(), "Removed socket file");
             }

@@ -8,9 +8,9 @@ pub mod commands;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use args::{CompletionArgs, ConfigArgs, RegisterArgs, RunArgs, UnregisterArgs, UpgradeArgs};
+use args::{CompletionArgs, ConfigArgs, RegisterArgs, RunArgs, UnregisterArgs};
 
-/// SSH agent proxy with filtering and logging
+/// SSH agent proxy with key filtering
 #[derive(Parser, Debug)]
 #[command(name = "authsock-filter")]
 #[command(author, version, about, long_about = None)]
@@ -24,6 +24,7 @@ pub struct Cli {
     /// Print version
     #[arg(long, action = clap::ArgAction::Version, global = true)]
     version: Option<bool>,
+
     /// Configuration file path
     #[arg(long, global = true, env = "AUTHSOCK_FILTER_CONFIG")]
     pub config: Option<PathBuf>,
@@ -53,9 +54,6 @@ pub enum Commands {
     /// Show version information
     Version,
 
-    /// Upgrade to the latest version from GitHub
-    Upgrade(UpgradeArgs),
-
     /// Manage OS service (launchd/systemd)
     Service {
         #[command(subcommand)]
@@ -69,24 +67,9 @@ pub enum Commands {
 /// Service management commands
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommand {
-    /// Register as an OS service
+    /// Register and start as an OS service (常駐化)
     Register(RegisterArgs),
 
-    /// Unregister the OS service
+    /// Stop and unregister the OS service (常駐化解除)
     Unregister(UnregisterArgs),
-
-    /// Show service status
-    Status,
-
-    /// Start the registered service
-    Start,
-
-    /// Stop the registered service
-    Stop,
-
-    /// Enable auto-start at login/boot
-    Enable,
-
-    /// Disable auto-start at login/boot
-    Disable,
 }

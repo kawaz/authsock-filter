@@ -31,21 +31,16 @@ pub struct RunArgs {
     #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
     pub upstream: Vec<PathBuf>,
 
-    /// Path to JSONL log file
-    #[arg(long)]
-    pub log: Option<PathBuf>,
-
     /// Socket definition with filters and options
     ///
-    /// Format: --socket PATH [FILTERS...] [OPTIONS...]
+    /// Format: --socket PATH [FILTERS...]
     ///
     /// Arguments after PATH until the next --socket are associated with this socket:
     ///   - Filters: type=value (e.g., comment=*@work*, github=kawaz, -type=dsa)
-    ///   - Options: --logging true, --mode 0666, etc.
     ///
     /// Examples:
     ///   --socket /tmp/work.sock comment=*@work* type=ed25519
-    ///   --socket /tmp/github.sock github=kawaz --logging true
+    ///   --socket /tmp/github.sock github=kawaz
     #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
@@ -80,28 +75,6 @@ pub struct ConfigArgs {
     pub format: String,
 }
 
-/// Arguments for the `upgrade` command
-#[derive(Args, Debug, Clone)]
-pub struct UpgradeArgs {
-    /// Force upgrade even if already at target version
-    #[arg(long)]
-    pub force: bool,
-
-    /// Check for updates only, don't install
-    #[arg(long)]
-    pub check: bool,
-
-    /// Skip confirmation prompt
-    #[arg(long)]
-    pub yes: bool,
-
-    /// Allow upgrading even when running from a version-managed path (mise/asdf/aqua)
-    ///
-    /// Warning: This bypasses version manager control and may cause inconsistencies.
-    #[arg(long)]
-    pub allow_versioned_path: bool,
-}
-
 /// Arguments for the `register` command
 #[derive(Args, Debug, Clone)]
 pub struct RegisterArgs {
@@ -120,18 +93,6 @@ pub struct RegisterArgs {
     /// Allow registering with a version-managed path (may break after upgrade)
     #[arg(long)]
     pub allow_versioned_path: bool,
-
-    /// Start service immediately after registration
-    #[arg(long)]
-    pub start: bool,
-
-    /// Enable service to start at login/boot
-    #[arg(long, default_value = "true")]
-    pub enable: bool,
-
-    /// Force re-registration (unregister existing service first)
-    #[arg(long, short = 'f')]
-    pub force: bool,
 
     /// Upstream SSH agent socket path for service
     #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
@@ -155,10 +116,6 @@ pub struct UnregisterArgs {
     /// Service name
     #[arg(long, default_value = "authsock-filter")]
     pub name: String,
-
-    /// Remove configuration files as well
-    #[arg(long)]
-    pub purge: bool,
 }
 
 /// Arguments for the `completion` command
@@ -244,11 +201,9 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
         } else if let Some(ref mut spec) = current_socket {
             // Arguments after --socket PATH belong to this socket
             // Skip known global options
-            if arg.starts_with("--log")
-                || arg.starts_with("--config")
+            if arg.starts_with("--config")
                 || arg.starts_with("--verbose")
                 || arg.starts_with("--quiet")
-                || arg.starts_with("--pid-file")
                 || arg.starts_with("--name")
                 || arg.starts_with("--start")
                 || arg.starts_with("--enable")
@@ -259,7 +214,7 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
                 || arg == "--version"
             {
                 // Skip global option and its value if needed
-                if arg == "--log" || arg == "--config" || arg == "--pid-file" || arg == "--name" {
+                if arg == "--config" || arg == "--name" {
                     iter.next(); // skip value
                 }
                 continue;
@@ -270,7 +225,6 @@ pub fn parse_upstream_groups_from_args() -> Vec<UpstreamGroup> {
             if !arg.starts_with("--") {
                 spec.filters.push(arg.clone());
             }
-            // TODO: Handle socket-specific options like --mode
         }
     }
 
