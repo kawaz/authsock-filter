@@ -103,11 +103,7 @@ mod launchd {
         format!("com.github.kawaz.{}", name)
     }
 
-    pub fn generate_plist(
-        name: &str,
-        exe_path: &str,
-        config_path: &str,
-    ) -> Result<Vec<u8>> {
+    pub fn generate_plist(name: &str, exe_path: &str, config_path: &str) -> Result<Vec<u8>> {
         let args = vec![
             exe_path.to_string(),
             "run".to_string(),
@@ -185,7 +181,10 @@ pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> R
     // Validate config file
     let config_file = load_config(&config_path)?;
     if config_file.config.sockets.is_empty() {
-        bail!("Configuration file has no sockets defined: {}", config_path.display());
+        bail!(
+            "Configuration file has no sockets defined: {}",
+            config_path.display()
+        );
     }
 
     info!(name = %args.name, executable = %exe_path_str, config = %config_path_str, "Registering launchd service");
@@ -292,7 +291,10 @@ pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> R
     // Validate config file
     let config_file = load_config(&config_path)?;
     if config_file.config.sockets.is_empty() {
-        bail!("Configuration file has no sockets defined: {}", config_path.display());
+        bail!(
+            "Configuration file has no sockets defined: {}",
+            config_path.display()
+        );
     }
 
     info!(name = %args.name, executable = %exe_path_str, config = %config_path_str, "Registering systemd service");

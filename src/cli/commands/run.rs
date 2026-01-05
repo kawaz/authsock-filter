@@ -23,9 +23,7 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
     let config = load_configuration(&args, config_path)?;
 
     if config.sockets.is_empty() {
-        bail!(
-            "No sockets configured. Use --socket option or define sockets in config file."
-        );
+        bail!("No sockets configured. Use --socket option or define sockets in config file.");
     }
 
     info!(
@@ -48,7 +46,10 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
 
     // Validate default upstream socket exists
     if !config.upstream.exists() {
-        bail!("Default upstream socket does not exist: {}", config.upstream.display());
+        bail!(
+            "Default upstream socket does not exist: {}",
+            config.upstream.display()
+        );
     }
 
     // Cache for upstream connections (to avoid creating duplicate Upstream instances)
@@ -79,9 +80,7 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         // Get or create upstream connection manager
         let upstream = upstream_cache
             .entry(upstream_path.clone())
-            .or_insert_with(|| {
-                Arc::new(Upstream::new(upstream_path.to_string_lossy().to_string()))
-            })
+            .or_insert_with(|| Arc::new(Upstream::new(upstream_path.to_string_lossy().to_string())))
             .clone();
 
         // Parse filters
@@ -100,8 +99,7 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
 
         // Create proxy
         let proxy = Arc::new(
-            Proxy::new_shared(upstream, Arc::new(filter))
-                .with_socket_path(&socket_path_str),
+            Proxy::new_shared(upstream, Arc::new(filter)).with_socket_path(&socket_path_str),
         );
 
         // Remove existing socket if present
@@ -195,8 +193,8 @@ fn load_configuration(args: &RunArgs, config_path: Option<PathBuf>) -> Result<Ex
     let cli_groups = args.parse_upstream_groups();
     if !cli_groups.is_empty() {
         // Convert CLI args to ExpandedConfig
-        use std::collections::HashMap;
         use crate::config::ExpandedSocketConfig;
+        use std::collections::HashMap;
 
         let default_upstream = cli_groups[0].path.clone();
         let mut sockets = HashMap::new();
@@ -211,11 +209,14 @@ fn load_configuration(args: &RunArgs, config_path: Option<PathBuf>) -> Result<Ex
 
             for (sock_idx, spec) in group.sockets.iter().enumerate() {
                 let name = format!("socket_{}_{}", idx, sock_idx);
-                sockets.insert(name, ExpandedSocketConfig {
-                    path: spec.path.clone(),
-                    upstream: socket_upstream.clone(),
-                    filters: spec.filters.clone(),
-                });
+                sockets.insert(
+                    name,
+                    ExpandedSocketConfig {
+                        path: spec.path.clone(),
+                        upstream: socket_upstream.clone(),
+                        filters: spec.filters.clone(),
+                    },
+                );
             }
         }
 
@@ -237,7 +238,10 @@ fn load_configuration(args: &RunArgs, config_path: Option<PathBuf>) -> Result<Ex
     info!(path = %config_file_path.display(), "Loading configuration");
 
     let config_file = load_config(&config_file_path)?;
-    config_file.config.expand_paths().map_err(|e| anyhow::anyhow!("{}", e))
+    config_file
+        .config
+        .expand_paths()
+        .map_err(|e| anyhow::anyhow!("{}", e))
 }
 
 /// Print configuration as TOML from CLI arguments
@@ -264,7 +268,8 @@ fn print_config_from_args(args: &RunArgs) -> Result<()> {
 
         for spec in &group.sockets {
             // Generate a name from socket path
-            let name = spec.path
+            let name = spec
+                .path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("socket")
@@ -284,11 +289,14 @@ fn print_config_from_args(args: &RunArgs) -> Result<()> {
                 name
             };
 
-            sockets.insert(final_name, SocketConfig {
-                path: spec.path.to_string_lossy().to_string(),
-                upstream: socket_upstream.clone(),
-                filters: spec.filters.clone(),
-            });
+            sockets.insert(
+                final_name,
+                SocketConfig {
+                    path: spec.path.to_string_lossy().to_string(),
+                    upstream: socket_upstream.clone(),
+                    filters: spec.filters.clone(),
+                },
+            );
         }
     }
 

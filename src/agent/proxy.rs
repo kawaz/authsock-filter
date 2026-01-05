@@ -110,9 +110,7 @@ impl Proxy {
             trace!(msg_type = ?request.msg_type, "Received request from client");
 
             // Process the request
-            let response = self
-                .process_request(request, &mut allowed_keys)
-                .await?;
+            let response = self.process_request(request, &mut allowed_keys).await?;
 
             // Send response to client
             AgentCodec::write(&mut client_writer, &response).await?;
@@ -131,9 +129,7 @@ impl Proxy {
             MessageType::RequestIdentities => {
                 self.handle_request_identities(request, allowed_keys).await
             }
-            MessageType::SignRequest => {
-                self.handle_sign_request(request, allowed_keys).await
-            }
+            MessageType::SignRequest => self.handle_sign_request(request, allowed_keys).await,
             _ => {
                 // Pass through other messages
                 self.forward_to_upstream(request).await

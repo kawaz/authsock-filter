@@ -45,14 +45,11 @@ async fn main() -> Result<()> {
 /// Initialize logging with tracing-subscriber
 fn init_logging(verbose: bool, quiet: bool) {
     let filter = if verbose {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("debug"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"))
     } else if quiet {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("error"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("error"))
     } else {
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("info"))
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
     };
 
     tracing_subscriber::fmt()
