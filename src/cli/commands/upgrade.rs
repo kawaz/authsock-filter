@@ -315,33 +315,22 @@ async fn fetch_release() -> Result<GitHubRelease> {
     Ok(release)
 }
 
-/// Extract mise tool name from installation path
-/// e.g., /path/mise/installs/github-kawaz-authsock-filter/0.1.5/... -> github:kawaz/authsock-filter
-fn extract_mise_tool_name(path: &std::path::Path) -> Option<String> {
-    let path_str = path.to_string_lossy();
+/// Get mise tool name using `mise which --plugin`
+fn extract_mise_tool_name(exe_path: &std::path::Path) -> Option<String> {
+    // Get the binary name from the path
+    let bin_name = exe_path.file_name()?.to_str()?;
 
-    // Find the tool name segment after /mise/installs/
-    let patterns = ["/mise/installs/", "/.mise/installs/"];
+    // Use `mise which --plugin` to get the official tool name
+    let output = std::process::Command::new("mise")
+        .args(["which", bin_name, "--plugin"])
+        .output()
+        .ok()?;
 
-    for pattern in patterns {
-        if let Some(start) = path_str.find(pattern) {
-            let after_pattern = &path_str[start + pattern.len()..];
-            // Get the first path segment (tool name with version info)
-            if let Some(end) = after_pattern.find('/') {
-                let tool_segment = &after_pattern[..end];
-                // Convert github-user-repo format to github:user/repo
-                // e.g., github-kawaz-authsock-filter -> github:kawaz/authsock-filter
-                if let Some(rest) = tool_segment.strip_prefix("github-") {
-                    // skip "github-"
-                    if let Some(dash_pos) = rest.find('-') {
-                        let user = &rest[..dash_pos];
-                        let repo = &rest[dash_pos + 1..];
-                        return Some(format!("github:{}/{}", user, repo));
-                    }
-                }
-                // Return as-is for other formats
-                return Some(tool_segment.to_string());
-            }
+    if output.status.success() {
+        let tool_name = String::from_utf8_lossy(&output.stdout);
+        let tool_name = tool_name.trim();
+        if !tool_name.is_empty() {
+            return Some(tool_name.to_string());
         }
     }
 
