@@ -154,7 +154,7 @@ upstream = "/run/user/1000/ssh-agent.sock"
 
 [sockets.test]
 path = "/tmp/test.sock"
-filters = ["type:ed25519"]
+filters = ["type=ed25519"]
 
 [github]
 cache_ttl = "2h"
@@ -187,7 +187,6 @@ path = "/tmp/minimal.sock"
 
         let config_file = load_config(&config_path).unwrap();
         assert_eq!(config_file.config.upstream, "$SSH_AUTH_SOCK"); // Default
-        assert!(config_file.config.log_path.is_none()); // Default
         assert_eq!(config_file.config.github.cache_ttl, "1h"); // Default
         assert_eq!(config_file.config.github.timeout, "10s"); // Default
     }
@@ -236,17 +235,16 @@ unknown_field = "value"
 
         let toml_content = r#"
 upstream = "$SSH_AUTH_SOCK"
-log_path = "$XDG_STATE_HOME/authsock-filter/messages.jsonl"
 
 [sockets.work]
 path = "$XDG_RUNTIME_DIR/authsock-filter/work.sock"
-filters = ["comment:~@work\\.example\\.com$"]
+filters = ["comment=~@work\\.example\\.com$"]
 
 [sockets.personal]
 path = "~/.ssh/personal-agent.sock"
 filters = [
-    "github:kawaz",
-    "type:ed25519",
+    "github=kawaz",
+    "type=ed25519",
 ]
 
 [github]

@@ -1,4 +1,4 @@
-//! Service management commands - register/unregister
+//! Service management commands - register/unregister/reload
 
 use anyhow::{Context, Result, bail};
 use std::fs;
@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use tracing::info;
 
 use super::detect_version_manager;
-use crate::cli::args::{RegisterArgs, UnregisterArgs, UpstreamGroup};
+use crate::cli::args::{RegisterArgs, UnregisterArgs};
+use crate::config::{find_config_file, load_config};
 
 // ============================================================================
 // Executable path resolution
@@ -62,6 +63,13 @@ fn resolve_service_executable(
     Ok(current_exe)
 }
 
+/// Get config file path (required for service registration)
+fn get_config_path(config_override: Option<PathBuf>) -> Result<PathBuf> {
+    config_override
+        .or_else(find_config_file)
+        .context("No configuration file found. Create ~/.config/authsock-filter/config.toml first.")
+}
+
 // ============================================================================
 // macOS launchd support
 // ============================================================================
@@ -98,21 +106,14 @@ mod launchd {
     pub fn generate_plist(
         name: &str,
         exe_path: &str,
-        upstream_groups: &[UpstreamGroup],
+        config_path: &str,
     ) -> Result<Vec<u8>> {
-        let mut args = vec![exe_path.to_string(), "run".to_string()];
-
-        for group in upstream_groups {
-            args.push("--upstream".to_string());
-            args.push(group.path.display().to_string());
-            for spec in &group.sockets {
-                args.push("--socket".to_string());
-                args.push(spec.path.display().to_string());
-                for filter in &spec.filters {
-                    args.push(filter.clone());
-                }
-            }
-        }
+        let args = vec![
+            exe_path.to_string(),
+            "run".to_string(),
+            "--config".to_string(),
+            config_path.to_string(),
+        ];
 
         let mut env = HashMap::new();
         env.insert(
@@ -151,19 +152,7 @@ mod systemd {
             .join(format!("{}.service", name))
     }
 
-    pub fn generate_unit(_name: &str, exe_path: &str, upstream_groups: &[UpstreamGroup]) -> String {
-        let mut exec_start = format!("{} run", exe_path);
-
-        for group in upstream_groups {
-            exec_start.push_str(&format!(" --upstream {}", group.path.display()));
-            for spec in &group.sockets {
-                exec_start.push_str(&format!(" --socket {}", spec.path.display()));
-                for filter in &spec.filters {
-                    exec_start.push_str(&format!(" {}", filter));
-                }
-            }
-        }
-
+    pub fn generate_unit(_name: &str, exe_path: &str, config_path: &str) -> String {
         format!(
             r#"[Unit]
 Description=SSH agent proxy with key filtering
@@ -171,7 +160,7 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart={exec_start}
+ExecStart={exe_path} run --config {config_path}
 Restart=on-failure
 RestartSec=5
 
@@ -187,11 +176,19 @@ WantedBy=default.target
 // ============================================================================
 
 #[cfg(target_os = "macos")]
-pub async fn register(args: RegisterArgs) -> Result<()> {
+pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> Result<()> {
     let exe_path = resolve_service_executable(args.executable.clone(), args.allow_versioned_path)?;
     let exe_path_str = exe_path.display().to_string();
+    let config_path = get_config_path(config_override)?;
+    let config_path_str = config_path.display().to_string();
 
-    info!(name = %args.name, executable = %exe_path_str, "Registering launchd service");
+    // Validate config file
+    let config_file = load_config(&config_path)?;
+    if config_file.config.sockets.is_empty() {
+        bail!("Configuration file has no sockets defined: {}", config_path.display());
+    }
+
+    info!(name = %args.name, executable = %exe_path_str, config = %config_path_str, "Registering launchd service");
 
     let plist_path = launchd::plist_path(&args.name);
 
@@ -210,12 +207,7 @@ pub async fn register(args: RegisterArgs) -> Result<()> {
     }
 
     // Generate and write plist
-    let upstream_groups = args.parse_upstream_groups();
-    if upstream_groups.is_empty() {
-        bail!("No upstream/socket configuration provided. Use --upstream and --socket options.");
-    }
-
-    let plist_content = launchd::generate_plist(&args.name, &exe_path_str, &upstream_groups)?;
+    let plist_content = launchd::generate_plist(&args.name, &exe_path_str, &config_path_str)?;
     fs::write(&plist_path, &plist_content).context("Failed to write launchd plist")?;
 
     println!("Created: {}", plist_path.display());
@@ -231,6 +223,7 @@ pub async fn register(args: RegisterArgs) -> Result<()> {
     }
 
     println!("Service registered and started successfully!");
+    println!("Config: {}", config_path.display());
     Ok(())
 }
 
@@ -257,16 +250,52 @@ pub async fn unregister(args: UnregisterArgs) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+pub async fn reload(args: UnregisterArgs) -> Result<()> {
+    info!(name = %args.name, "Reloading launchd service");
+
+    let plist_path = launchd::plist_path(&args.name);
+
+    if !plist_path.exists() {
+        bail!("Service is not registered. Use 'service register' first.");
+    }
+
+    // Unload and reload the service
+    let _ = std::process::Command::new("launchctl")
+        .args(["unload", plist_path.to_str().unwrap()])
+        .status();
+
+    let status = std::process::Command::new("launchctl")
+        .args(["load", "-w", plist_path.to_str().unwrap()])
+        .status()
+        .context("Failed to reload service")?;
+
+    if !status.success() {
+        bail!("Failed to reload service");
+    }
+
+    println!("Service reloaded successfully!");
+    Ok(())
+}
+
 // ============================================================================
 // Public API - Linux
 // ============================================================================
 
 #[cfg(target_os = "linux")]
-pub async fn register(args: RegisterArgs) -> Result<()> {
+pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> Result<()> {
     let exe_path = resolve_service_executable(args.executable.clone(), args.allow_versioned_path)?;
     let exe_path_str = exe_path.display().to_string();
+    let config_path = get_config_path(config_override)?;
+    let config_path_str = config_path.display().to_string();
 
-    info!(name = %args.name, executable = %exe_path_str, "Registering systemd service");
+    // Validate config file
+    let config_file = load_config(&config_path)?;
+    if config_file.config.sockets.is_empty() {
+        bail!("Configuration file has no sockets defined: {}", config_path.display());
+    }
+
+    info!(name = %args.name, executable = %exe_path_str, config = %config_path_str, "Registering systemd service");
 
     let unit_path = systemd::unit_path(&args.name);
 
@@ -288,12 +317,7 @@ pub async fn register(args: RegisterArgs) -> Result<()> {
     }
 
     // Generate and write unit file
-    let upstream_groups = args.parse_upstream_groups();
-    if upstream_groups.is_empty() {
-        bail!("No upstream/socket configuration provided. Use --upstream and --socket options.");
-    }
-
-    let unit_content = systemd::generate_unit(&args.name, &exe_path_str, &upstream_groups);
+    let unit_content = systemd::generate_unit(&args.name, &exe_path_str, &config_path_str);
     fs::write(&unit_path, &unit_content).context("Failed to write systemd unit file")?;
 
     println!("Created: {}", unit_path.display());
@@ -317,6 +341,7 @@ pub async fn register(args: RegisterArgs) -> Result<()> {
     }
 
     println!("Service registered and started successfully!");
+    println!("Config: {}", config_path.display());
     Ok(())
 }
 
@@ -351,16 +376,44 @@ pub async fn unregister(args: UnregisterArgs) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+pub async fn reload(args: UnregisterArgs) -> Result<()> {
+    info!(name = %args.name, "Reloading systemd service");
+
+    let unit_path = systemd::unit_path(&args.name);
+
+    if !unit_path.exists() {
+        bail!("Service is not registered. Use 'service register' first.");
+    }
+
+    let status = std::process::Command::new("systemctl")
+        .args(["--user", "restart", &args.name])
+        .status()
+        .context("Failed to restart service")?;
+
+    if !status.success() {
+        bail!("Failed to restart service");
+    }
+
+    println!("Service reloaded successfully!");
+    Ok(())
+}
+
 // ============================================================================
 // Public API - Unsupported platforms
 // ============================================================================
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub async fn register(_args: RegisterArgs) -> Result<()> {
+pub async fn register(_args: RegisterArgs, _config_override: Option<PathBuf>) -> Result<()> {
     bail!("Service registration is not supported on this platform")
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub async fn unregister(_args: UnregisterArgs) -> Result<()> {
+    bail!("Service management is not supported on this platform")
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub async fn reload(_args: UnregisterArgs) -> Result<()> {
     bail!("Service management is not supported on this platform")
 }

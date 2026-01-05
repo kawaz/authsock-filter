@@ -20,11 +20,6 @@ pub struct Config {
     #[serde(default = "default_upstream")]
     pub upstream: String,
 
-    /// Path to the log file for message logging
-    /// Supports environment variable and tilde expansion
-    #[serde(default)]
-    pub log_path: Option<String>,
-
     /// Socket definitions
     #[serde(default)]
     pub sockets: HashMap<String, SocketConfig>,
@@ -41,6 +36,10 @@ pub struct SocketConfig {
     /// Path to the socket file
     /// Supports environment variable and tilde expansion
     pub path: String,
+
+    /// Optional upstream for this socket (overrides global upstream)
+    #[serde(default)]
+    pub upstream: Option<String>,
 
     /// Filter rules for this socket
     #[serde(default)]
@@ -66,7 +65,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             upstream: default_upstream(),
-            log_path: None,
             sockets: HashMap::new(),
             github: GithubConfig::default(),
         }
@@ -98,14 +96,21 @@ impl Config {
     /// Expand environment variables and tilde in all paths
     pub fn expand_paths(&self) -> crate::Result<ExpandedConfig> {
         let upstream = expand_path(&self.upstream)?;
-        let log_path = self.log_path.as_ref().map(|p| expand_path(p)).transpose()?;
 
         let mut sockets = HashMap::new();
         for (name, socket) in &self.sockets {
+            let socket_upstream = socket
+                .upstream
+                .as_ref()
+                .map(|u| expand_path(u))
+                .transpose()?
+                .map(PathBuf::from);
+
             sockets.insert(
                 name.clone(),
                 ExpandedSocketConfig {
                     path: PathBuf::from(expand_path(&socket.path)?),
+                    upstream: socket_upstream,
                     filters: socket.filters.clone(),
                 },
             );
@@ -113,7 +118,6 @@ impl Config {
 
         Ok(ExpandedConfig {
             upstream: PathBuf::from(upstream),
-            log_path: log_path.map(PathBuf::from),
             sockets,
             github: ExpandedGithubConfig {
                 cache_ttl: parse_duration(&self.github.cache_ttl)?,
@@ -129,9 +133,6 @@ pub struct ExpandedConfig {
     /// Resolved path to the upstream SSH agent socket
     pub upstream: PathBuf,
 
-    /// Resolved path to the log file
-    pub log_path: Option<PathBuf>,
-
     /// Socket definitions with expanded paths
     pub sockets: HashMap<String, ExpandedSocketConfig>,
 
@@ -144,6 +145,9 @@ pub struct ExpandedConfig {
 pub struct ExpandedSocketConfig {
     /// Resolved socket path
     pub path: PathBuf,
+
+    /// Resolved upstream path (if overridden for this socket)
+    pub upstream: Option<PathBuf>,
 
     /// Filter rules for this socket
     pub filters: Vec<String>,
@@ -289,7 +293,6 @@ mod tests {
     fn test_default_config() {
         let config = Config::default();
         assert_eq!(config.upstream, "$SSH_AUTH_SOCK");
-        assert!(config.log_path.is_none());
         assert!(config.sockets.is_empty());
         assert_eq!(config.github.cache_ttl, "1h");
         assert_eq!(config.github.timeout, "10s");
@@ -299,17 +302,16 @@ mod tests {
     fn test_parse_config_toml() {
         let toml_str = r#"
 upstream = "$SSH_AUTH_SOCK"
-log_path = "$XDG_STATE_HOME/authsock-filter/messages.jsonl"
 
 [sockets.work]
 path = "$XDG_RUNTIME_DIR/authsock-filter/work.sock"
-filters = ["comment:~@work\\.example\\.com$"]
+filters = ["comment=~@work\\.example\\.com$"]
 
 [sockets.personal]
 path = "~/.ssh/personal-agent.sock"
 filters = [
-    "github:kawaz",
-    "type:ed25519",
+    "github=kawaz",
+    "type=ed25519",
 ]
 
 [github]
@@ -319,19 +321,15 @@ timeout = "10s"
 
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.upstream, "$SSH_AUTH_SOCK");
-        assert_eq!(
-            config.log_path,
-            Some("$XDG_STATE_HOME/authsock-filter/messages.jsonl".to_string())
-        );
         assert_eq!(config.sockets.len(), 2);
 
         let work = config.sockets.get("work").unwrap();
         assert_eq!(work.path, "$XDG_RUNTIME_DIR/authsock-filter/work.sock");
-        assert_eq!(work.filters, vec!["comment:~@work\\.example\\.com$"]);
+        assert_eq!(work.filters, vec!["comment=~@work\\.example\\.com$"]);
 
         let personal = config.sockets.get("personal").unwrap();
         assert_eq!(personal.path, "~/.ssh/personal-agent.sock");
-        assert_eq!(personal.filters, vec!["github:kawaz", "type:ed25519"]);
+        assert_eq!(personal.filters, vec!["github=kawaz", "type=ed25519"]);
 
         assert_eq!(config.github.cache_ttl, "1h");
         assert_eq!(config.github.timeout, "10s");

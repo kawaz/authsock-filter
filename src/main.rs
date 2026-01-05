@@ -18,15 +18,20 @@ async fn main() -> Result<()> {
     init_logging(cli.verbose, cli.quiet);
 
     match cli.command {
-        Commands::Run(args) => authsock_filter::cli::commands::run::execute(args).await?,
+        Commands::Run(args) => {
+            authsock_filter::cli::commands::run::execute(args, cli.config).await?
+        }
         Commands::Config(args) => authsock_filter::cli::commands::config::execute(args).await?,
         Commands::Version => authsock_filter::cli::commands::version::execute().await?,
         Commands::Service { command } => match command {
             ServiceCommand::Register(args) => {
-                authsock_filter::cli::commands::service::register(args).await?
+                authsock_filter::cli::commands::service::register(args, cli.config).await?
             }
             ServiceCommand::Unregister(args) => {
                 authsock_filter::cli::commands::service::unregister(args).await?
+            }
+            ServiceCommand::Reload(args) => {
+                authsock_filter::cli::commands::service::reload(args).await?
             }
         },
         Commands::Completion(args) => {

@@ -72,4 +72,7 @@ pub enum ServiceCommand {
 
     /// Stop and unregister the OS service (常駐化解除)
     Unregister(UnregisterArgs),
+
+    /// Reload configuration (restart service)
+    Reload(UnregisterArgs),
 }

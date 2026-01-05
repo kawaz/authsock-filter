@@ -44,6 +44,10 @@ pub struct RunArgs {
     #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
+    /// Print configuration as TOML and exit (useful for creating config file)
+    #[arg(long)]
+    pub print_config: bool,
+
     /// Foreground mode (don't daemonize) - always true for `run`
     #[arg(long, hide = true, default_value = "true")]
     pub foreground: bool,
@@ -93,21 +97,6 @@ pub struct RegisterArgs {
     /// Allow registering with a version-managed path (may break after upgrade)
     #[arg(long)]
     pub allow_versioned_path: bool,
-
-    /// Upstream SSH agent socket path for service
-    #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
-    pub upstream: Vec<PathBuf>,
-
-    /// Socket definition with filters and options
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
-    pub socket: Vec<String>,
-}
-
-impl RegisterArgs {
-    /// Parse upstream groups from command line arguments
-    pub fn parse_upstream_groups(&self) -> Vec<UpstreamGroup> {
-        parse_upstream_groups_from_args()
-    }
 }
 
 /// Arguments for the `unregister` command
