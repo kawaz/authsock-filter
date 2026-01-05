@@ -32,6 +32,7 @@ pub fn detect_version_manager(path: &Path) -> Option<VersionManagerInfo> {
         ("/.asdf/installs/", "asdf"),
         ("/aqua/pkgs/", "aqua"),
         ("/.aqua/pkgs/", "aqua"),
+        ("/nix/store/", "nix"),
     ];
 
     for (pattern, manager) in version_manager_patterns {
@@ -60,6 +61,10 @@ fn find_shim_suggestions(current_exe: &Path) -> Vec<(PathBuf, bool)> {
         dirs::data_local_dir().map(|d| d.join("mise/shims/authsock-filter")),
         // asdf shims
         dirs::home_dir().map(|d| d.join(".asdf/shims/authsock-filter")),
+        // nix profile
+        dirs::home_dir().map(|d| d.join(".nix-profile/bin/authsock-filter")),
+        // NixOS system profile
+        Some(PathBuf::from("/run/current-system/sw/bin/authsock-filter")),
         // ~/.local/bin (common user bin)
         dirs::home_dir().map(|d| d.join(".local/bin/authsock-filter")),
         // Homebrew
