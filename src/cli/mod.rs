@@ -8,10 +8,7 @@ pub mod commands;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use args::{
-    CompletionArgs, ConfigArgs, RegisterArgs, RunArgs, StartArgs, StatusArgs, StopArgs,
-    UnregisterArgs, UpgradeArgs,
-};
+use args::{CompletionArgs, ConfigArgs, RegisterArgs, RunArgs, UnregisterArgs, UpgradeArgs};
 
 /// SSH agent proxy with filtering and logging
 #[derive(Parser, Debug)]
@@ -50,15 +47,6 @@ pub enum Commands {
     /// Run the proxy in the foreground
     Run(RunArgs),
 
-    /// Start the proxy as a background daemon
-    Start(StartArgs),
-
-    /// Stop the running daemon
-    Stop(StopArgs),
-
-    /// Show the status of the daemon
-    Status(StatusArgs),
-
     /// Show or validate configuration
     Config(ConfigArgs),
 
@@ -68,12 +56,37 @@ pub enum Commands {
     /// Upgrade to the latest version from GitHub
     Upgrade(UpgradeArgs),
 
-    /// Register as an OS service (launchd/systemd)
+    /// Manage OS service (launchd/systemd)
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommand,
+    },
+
+    /// Generate shell completions
+    Completion(CompletionArgs),
+}
+
+/// Service management commands
+#[derive(Subcommand, Debug, Clone)]
+pub enum ServiceCommand {
+    /// Register as an OS service
     Register(RegisterArgs),
 
     /// Unregister the OS service
     Unregister(UnregisterArgs),
 
-    /// Generate shell completions
-    Completion(CompletionArgs),
+    /// Show service status
+    Status,
+
+    /// Start the registered service
+    Start,
+
+    /// Stop the registered service
+    Stop,
+
+    /// Enable auto-start at login/boot
+    Enable,
+
+    /// Disable auto-start at login/boot
+    Disable,
 }

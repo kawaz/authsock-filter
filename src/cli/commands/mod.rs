@@ -2,11 +2,7 @@
 
 pub mod completion;
 pub mod config;
-pub mod register;
 pub mod run;
-pub mod start;
-pub mod status;
-pub mod stop;
-pub mod unregister;
+pub mod service;
 pub mod upgrade;
 pub mod version;

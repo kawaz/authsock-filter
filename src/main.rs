@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_complete::env::CompleteEnv;
 
-use authsock_filter::cli::{Cli, Commands};
+use authsock_filter::cli::{Cli, Commands, ServiceCommand};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -18,16 +18,22 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Run(args) => authsock_filter::cli::commands::run::execute(args).await?,
-        Commands::Start(args) => authsock_filter::cli::commands::start::execute(args).await?,
-        Commands::Stop(args) => authsock_filter::cli::commands::stop::execute(args).await?,
-        Commands::Status(args) => authsock_filter::cli::commands::status::execute(args).await?,
         Commands::Config(args) => authsock_filter::cli::commands::config::execute(args).await?,
         Commands::Version => authsock_filter::cli::commands::version::execute().await?,
         Commands::Upgrade(args) => authsock_filter::cli::commands::upgrade::execute(args).await?,
-        Commands::Register(args) => authsock_filter::cli::commands::register::execute(args).await?,
-        Commands::Unregister(args) => {
-            authsock_filter::cli::commands::unregister::execute(args).await?
-        }
+        Commands::Service { command } => match command {
+            ServiceCommand::Register(args) => {
+                authsock_filter::cli::commands::service::register(args).await?
+            }
+            ServiceCommand::Unregister(args) => {
+                authsock_filter::cli::commands::service::unregister(args).await?
+            }
+            ServiceCommand::Start => authsock_filter::cli::commands::service::start().await?,
+            ServiceCommand::Stop => authsock_filter::cli::commands::service::stop().await?,
+            ServiceCommand::Status => authsock_filter::cli::commands::service::status().await?,
+            ServiceCommand::Enable => authsock_filter::cli::commands::service::enable().await?,
+            ServiceCommand::Disable => authsock_filter::cli::commands::service::disable().await?,
+        },
         Commands::Completion(args) => {
             authsock_filter::cli::commands::completion::execute(args).await?
         }

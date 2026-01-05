@@ -64,61 +64,6 @@ impl RunArgs {
     }
 }
 
-/// Arguments for the `start` command
-#[derive(Args, Debug, Clone)]
-pub struct StartArgs {
-    /// Upstream SSH agent socket path
-    #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
-    pub upstream: Vec<PathBuf>,
-
-    /// Path to JSONL log file
-    #[arg(long)]
-    pub log: Option<PathBuf>,
-
-    /// Socket definition with filters and options
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
-    pub socket: Vec<String>,
-
-    /// PID file path
-    #[arg(long)]
-    pub pid_file: Option<PathBuf>,
-}
-
-impl StartArgs {
-    /// Parse upstream groups from command line arguments
-    pub fn parse_upstream_groups(&self) -> Vec<UpstreamGroup> {
-        parse_upstream_groups_from_args()
-    }
-}
-
-/// Arguments for the `stop` command
-#[derive(Args, Debug, Clone)]
-pub struct StopArgs {
-    /// PID file path
-    #[arg(long)]
-    pub pid_file: Option<PathBuf>,
-
-    /// Force stop without waiting
-    #[arg(long)]
-    pub force: bool,
-
-    /// Timeout in seconds for graceful shutdown
-    #[arg(long, default_value = "10")]
-    pub timeout: u64,
-}
-
-/// Arguments for the `status` command
-#[derive(Args, Debug, Clone)]
-pub struct StatusArgs {
-    /// PID file path
-    #[arg(long)]
-    pub pid_file: Option<PathBuf>,
-
-    /// Output format
-    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
-    pub format: String,
-}
-
 /// Arguments for the `config` command
 #[derive(Args, Debug, Clone)]
 pub struct ConfigArgs {
@@ -165,6 +110,10 @@ pub struct RegisterArgs {
     /// Enable service to start at login/boot
     #[arg(long, default_value = "true")]
     pub enable: bool,
+
+    /// Force re-registration (unregister existing service first)
+    #[arg(long, short = 'f')]
+    pub force: bool,
 
     /// Upstream SSH agent socket path for service
     #[arg(long, num_args = 1, action = clap::ArgAction::Append, add = ArgValueCompleter::new(upstream_completer))]
