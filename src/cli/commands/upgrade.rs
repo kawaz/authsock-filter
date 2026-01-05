@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use tracing::info;
 
+use super::detect_version_manager;
 use crate::cli::args::UpgradeArgs;
 
 /// GitHub API release information
@@ -77,6 +78,49 @@ fn compare_versions(current: &str, latest: &str) -> std::cmp::Ordering {
 pub async fn execute(args: UpgradeArgs) -> Result<()> {
     let current_version = crate::VERSION;
     info!(current = current_version, "Checking for updates...");
+
+    // Check if running from a version-managed path
+    let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
+    if let Some(info) = detect_version_manager(&current_exe) {
+        let mut msg = format!(
+            "Error: Cannot upgrade - running from {} version manager.\n\
+             Current path: {}\n\n\
+             The 'upgrade' command directly overwrites the executable, which would\n\
+             bypass {} version management and cause inconsistencies.\n",
+            info.name,
+            info.current_path.display(),
+            info.name
+        );
+
+        msg.push_str(&format!("\nUse {} to upgrade instead:\n", info.name));
+
+        match info.name {
+            "mise" => {
+                msg.push_str("  mise upgrade authsock-filter\n");
+                msg.push_str("  # or\n");
+                msg.push_str("  mise use authsock-filter@latest\n");
+            }
+            "asdf" => {
+                msg.push_str("  asdf install authsock-filter latest\n");
+                msg.push_str("  asdf global authsock-filter latest\n");
+            }
+            "aqua" => {
+                msg.push_str("  aqua update authsock-filter\n");
+            }
+            _ => {
+                msg.push_str(&format!("  {} upgrade authsock-filter\n", info.name));
+            }
+        }
+
+        if !info.suggestions.is_empty() {
+            msg.push_str("\nAlternatively, run upgrade from a stable path:\n");
+            for (shim_path, _) in &info.suggestions {
+                msg.push_str(&format!("  {} upgrade\n", shim_path.display()));
+            }
+        }
+
+        bail!("{}", msg);
+    }
 
     println!("Current version: {}", current_version);
     println!();

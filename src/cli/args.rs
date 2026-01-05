@@ -103,6 +103,18 @@ pub struct RegisterArgs {
     #[arg(long, default_value = "authsock-filter")]
     pub name: String,
 
+    /// Path to the executable for the service
+    ///
+    /// By default, uses the current executable path.
+    /// If running from a version manager (mise, asdf, etc.),
+    /// consider specifying a stable path like the shims directory.
+    #[arg(long, value_name = "PATH")]
+    pub executable: Option<PathBuf>,
+
+    /// Allow registering with a version-managed path (may break after upgrade)
+    #[arg(long)]
+    pub allow_versioned_path: bool,
+
     /// Start service immediately after registration
     #[arg(long)]
     pub start: bool,
