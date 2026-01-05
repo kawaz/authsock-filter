@@ -39,10 +39,24 @@ fn resolve_service_executable(
         return path.canonicalize().context("Failed to canonicalize path");
     }
 
-    // 2. Use current executable
+    // 2. Check if argv[0] is a stable path (e.g., shim)
+    //    When executed via mise shim, argv[0] is the shim path but current_exe() returns
+    //    the version-specific binary path. If argv[0] is a stable path, use it.
+    if let Some(arg0) = std::env::args().next() {
+        let arg0_path = PathBuf::from(&arg0);
+        if arg0_path.is_absolute()
+            && arg0_path.exists()
+            && detect_version_manager(&arg0_path).is_none()
+        {
+            // argv[0] is an absolute path that exists and is NOT under version manager
+            return Ok(arg0_path);
+        }
+    }
+
+    // 3. Use current executable
     let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
 
-    // 3. Check if it's a version-managed path
+    // 4. Check if it's a version-managed path
     if let Some(info) = detect_version_manager(&current_exe) {
         if allow_versioned {
             eprintln!(
