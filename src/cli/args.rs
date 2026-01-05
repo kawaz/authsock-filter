@@ -94,6 +94,12 @@ pub struct UpgradeArgs {
     /// Skip confirmation prompt
     #[arg(long)]
     pub yes: bool,
+
+    /// Allow upgrading even when running from a version-managed path (mise/asdf/aqua)
+    ///
+    /// Warning: This bypasses version manager control and may cause inconsistencies.
+    #[arg(long)]
+    pub allow_versioned_path: bool,
 }
 
 /// Arguments for the `register` command

@@ -95,53 +95,77 @@ pub async fn execute(args: UpgradeArgs) -> Result<()> {
     // Check if running from a version-managed path
     let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
     if let Some(info) = detect_version_manager(&current_exe) {
-        // Extract tool name from path for mise (e.g., github-kawaz-authsock-filter -> github:kawaz/authsock-filter)
-        let tool_name = extract_mise_tool_name(&info.current_path);
+        if args.allow_versioned_path {
+            // User explicitly allowed upgrading in version-managed path
+            eprintln!(
+                "Warning: Upgrading in {} version-managed path (--allow-versioned-path).\n\
+                 This bypasses {} and may cause version inconsistencies.\n\
+                 Path: {}\n",
+                info.name,
+                info.name,
+                current_exe.display()
+            );
+        } else {
+            // Get tool name for better error message
+            let tool_name = extract_mise_tool_name(&info.current_path);
 
-        let mut msg = format!(
-            "Cannot upgrade - running from {} version manager.\n\
-             Current path: {}\n\n\
-             The 'upgrade' command directly overwrites the executable, which would\n\
-             bypass {} version management and cause inconsistencies.\n",
-            info.name,
-            info.current_path.display(),
-            info.name
-        );
+            let mut msg = format!(
+                "Running from {} version manager.\n\
+                 Current path: {}\n\n\
+                 The 'upgrade' command directly overwrites the executable, which would\n\
+                 bypass {} version management and may cause inconsistencies.\n",
+                info.name,
+                info.current_path.display(),
+                info.name
+            );
 
-        msg.push_str(&format!("\nUse {} to upgrade instead:\n", info.name));
+            // Suggest using version manager
+            msg.push_str(&format!(
+                "\n# Use {} to upgrade (recommended):\n",
+                info.name
+            ));
 
-        match info.name {
-            "mise" => {
-                if let Some(ref name) = tool_name {
-                    msg.push_str(&format!("  mise upgrade {}\n", name));
-                    msg.push_str("  # or\n");
-                    msg.push_str(&format!("  mise use {}@latest\n", name));
-                } else {
-                    msg.push_str("  mise upgrade <tool-name>\n");
-                    msg.push_str("  # or\n");
-                    msg.push_str("  mise use <tool-name>@latest\n");
+            match info.name {
+                "mise" => {
+                    if let Some(ref name) = tool_name {
+                        msg.push_str(&format!("  mise upgrade {}\n", name));
+                        msg.push_str("  # or\n");
+                        msg.push_str(&format!("  mise use {}@latest\n", name));
+                    } else {
+                        msg.push_str("  mise upgrade <tool-name>\n");
+                        msg.push_str("  # or\n");
+                        msg.push_str("  mise use <tool-name>@latest\n");
+                    }
+                }
+                "asdf" => {
+                    msg.push_str("  asdf install authsock-filter latest\n");
+                    msg.push_str("  asdf global authsock-filter latest\n");
+                }
+                "aqua" => {
+                    msg.push_str("  aqua update authsock-filter\n");
+                }
+                _ => {
+                    msg.push_str(&format!("  {} upgrade authsock-filter\n", info.name));
                 }
             }
-            "asdf" => {
-                msg.push_str("  asdf install authsock-filter latest\n");
-                msg.push_str("  asdf global authsock-filter latest\n");
-            }
-            "aqua" => {
-                msg.push_str("  aqua update authsock-filter\n");
-            }
-            _ => {
-                msg.push_str(&format!("  {} upgrade authsock-filter\n", info.name));
-            }
-        }
 
-        if !info.suggestions.is_empty() {
-            msg.push_str("\nAlternatively, run upgrade from a stable path:\n");
-            for (shim_path, _) in &info.suggestions {
-                msg.push_str(&format!("  {} upgrade\n", shim_path.display()));
+            // Suggest running from stable path
+            if !info.suggestions.is_empty() {
+                msg.push_str("\n# Or run upgrade from a stable path:\n");
+                for (shim_path, _) in &info.suggestions {
+                    msg.push_str(&format!("  {} upgrade\n", shim_path.display()));
+                }
             }
-        }
 
-        bail!("{}", msg);
+            // Suggest --allow-versioned-path option
+            msg.push_str("\n# Or proceed anyway (not recommended):\n");
+            msg.push_str(&format!(
+                "  {} upgrade --allow-versioned-path\n",
+                current_exe.display()
+            ));
+
+            bail!("{}", msg);
+        }
     }
 
     // Check if upgrade is needed
