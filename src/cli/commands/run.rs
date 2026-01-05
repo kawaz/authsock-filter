@@ -64,7 +64,7 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
     let mut handles = Vec::new();
     let mut socket_paths = Vec::new();
 
-    for (_name, spec) in &config.sockets {
+    for spec in config.sockets.values() {
         // Determine upstream for this socket
         let upstream_path = spec.upstream.as_ref().unwrap_or(&config.upstream);
 
