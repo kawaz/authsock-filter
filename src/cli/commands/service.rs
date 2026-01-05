@@ -73,24 +73,17 @@ fn resolve_service_executable(
             if !info.suggestions.is_empty() {
                 msg.push_str("\n# Re-run using a stable path (recommended):\n");
                 for (shim_path, is_same) in &info.suggestions {
-                    let same_note = if *is_same {
-                        " (verified: same binary)"
-                    } else {
-                        ""
-                    };
-                    msg.push_str(&format!(
-                        "  {} {}{}\n",
-                        shim_path.display(),
-                        cmd_args.join(" "),
-                        same_note
-                    ));
+                    msg.push_str(&format!("{} {}\n", shim_path.display(), cmd_args.join(" ")));
+                    if *is_same {
+                        msg.push_str("(verified: same binary)\n");
+                    }
                 }
             }
 
             // Always show the --allow-versioned-path option with full command
             msg.push_str("\n# Or proceed with current version-specific path:\n");
             msg.push_str(&format!(
-                "  {} --allow-versioned-path {}\n",
+                "{} --allow-versioned-path {}\n",
                 current_exe.display(),
                 cmd_args.join(" ")
             ));
