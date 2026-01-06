@@ -463,6 +463,66 @@ pub async fn reload(args: UnregisterArgs) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+pub async fn status(args: UnregisterArgs) -> Result<()> {
+    let plist_path = launchd::plist_path(&args.name);
+    let label = launchd::label(&args.name);
+
+    // Check if registered
+    if !plist_path.exists() {
+        println!("Service is not registered");
+        return Ok(());
+    }
+
+    println!("Plist: {}", plist_path.display());
+
+    // Get status from launchctl list (grep for our label)
+    let output = std::process::Command::new("launchctl")
+        .arg("list")
+        .output()
+        .context("Failed to run launchctl")?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut found = false;
+
+    for line in stdout.lines() {
+        if line.contains(&label) {
+            // Format: "PID\tStatus\tLabel"
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() >= 3 {
+                let pid = parts[0];
+                let exit_status = parts[1];
+
+                if pid == "-" {
+                    println!("Status: \x1b[31mNot running\x1b[0m (exit: {})", exit_status);
+                } else {
+                    println!("Status: \x1b[32mRunning\x1b[0m (pid: {})", pid);
+                }
+            }
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        println!("Status: \x1b[31mNot loaded\x1b[0m");
+    }
+
+    // Show how to get more details
+    let uid = std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+
+    println!();
+    println!("# For details:");
+    println!("launchctl print gui/{}/{}", uid, label);
+
+    Ok(())
+}
+
 // ============================================================================
 // Public API - Linux
 // ============================================================================
@@ -587,6 +647,53 @@ pub async fn reload(args: UnregisterArgs) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+pub async fn status(args: UnregisterArgs) -> Result<()> {
+    let unit_path = systemd::unit_path(&args.name);
+
+    // Check if registered
+    if !unit_path.exists() {
+        println!("Service is not registered");
+        return Ok(());
+    }
+
+    println!("Unit: {}", unit_path.display());
+
+    // Get status from systemctl is-active
+    let output = std::process::Command::new("systemctl")
+        .args(["--user", "is-active", &args.name])
+        .output();
+
+    let is_active = output
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if is_active == "active" {
+        // Get PID
+        let pid_output = std::process::Command::new("systemctl")
+            .args(["--user", "show", &args.name, "--property=MainPID", "--value"])
+            .output();
+
+        let pid = pid_output
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+
+        println!("Status: \x1b[32mRunning\x1b[0m (pid: {})", pid);
+    } else {
+        println!("Status: \x1b[31m{}\x1b[0m", is_active);
+    }
+
+    println!();
+    println!("# For details:");
+    println!("systemctl --user status {}", args.name);
+
+    Ok(())
+}
+
 // ============================================================================
 // Public API - Unsupported platforms
 // ============================================================================
@@ -603,5 +710,10 @@ pub async fn unregister(_args: UnregisterArgs) -> Result<()> {
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub async fn reload(_args: UnregisterArgs) -> Result<()> {
+    bail!("Service management is not supported on this platform")
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub async fn status(_args: UnregisterArgs) -> Result<()> {
     bail!("Service management is not supported on this platform")
 }

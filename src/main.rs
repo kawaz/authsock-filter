@@ -33,6 +33,9 @@ async fn main() -> Result<()> {
             ServiceCommand::Reload(args) => {
                 authsock_filter::cli::commands::service::reload(args).await?
             }
+            ServiceCommand::Status(args) => {
+                authsock_filter::cli::commands::service::status(args).await?
+            }
         },
         Commands::Completion(args) => {
             authsock_filter::cli::commands::completion::execute(args).await?

@@ -75,4 +75,7 @@ pub enum ServiceCommand {
 
     /// Reload configuration (restart service)
     Reload(UnregisterArgs),
+
+    /// Show service status
+    Status(UnregisterArgs),
 }
