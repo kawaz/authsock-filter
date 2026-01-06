@@ -123,6 +123,7 @@ fn resolve_service_executable(
     }
 
     // 2. Check if argv[0] is a stable path (e.g., shim)
+    // Note: mise sets argv[0] to actual binary path, not shim path
     if let Some(arg0) = std::env::args().next() {
         let arg0_path = PathBuf::from(&arg0);
         if arg0_path.is_absolute()
@@ -138,6 +139,17 @@ fn resolve_service_executable(
 
     // 4. Check if it's a version-managed path
     if let Some(info) = detect_version_manager(&current_exe) {
+        // 4a. First, check if there's a shim path available - use it automatically
+        let shim_path = find_executable_candidates("authsock-filter")
+            .into_iter()
+            .find(|p| is_shim_path(p));
+        if let Some(shim) = shim_path {
+            // Shim found - use it automatically
+            info!(shim = %shim.display(), "Using shim path instead of versioned path");
+            return Ok(shim);
+        }
+
+        // 4b. No shim available, show candidates
         if allow_versioned {
             eprintln!(
                 "Warning: Registering with version-managed path.\nPath: {}\n",
