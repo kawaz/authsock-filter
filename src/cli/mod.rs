@@ -4,6 +4,7 @@
 
 pub mod args;
 pub mod commands;
+pub mod exit_code;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -13,24 +14,23 @@ use args::{CompletionArgs, RegisterArgs, RunArgs, UnregisterArgs};
 /// SSH agent proxy with key filtering
 #[derive(Parser, Debug)]
 #[command(name = "authsock-filter")]
-#[command(author, version, about, long_about = None)]
-#[command(propagate_version = true)]
+#[command(author, about, long_about = None)]
 #[command(disable_help_flag = true, disable_version_flag = true)]
 pub struct Cli {
     /// Print help
     #[arg(long, action = clap::ArgAction::Help, global = true)]
     help: Option<bool>,
 
-    /// Print version
-    #[arg(long, action = clap::ArgAction::Version, global = true)]
-    version: Option<bool>,
+    /// Print version (use -v/--verbose with --version for detailed info)
+    #[arg(short = 'V', long)]
+    pub version: bool,
 
     /// Configuration file path
     #[arg(long, global = true, env = "AUTHSOCK_FILTER_CONFIG")]
     pub config: Option<PathBuf>,
 
     /// Enable verbose output
-    #[arg(long, global = true, conflicts_with = "quiet")]
+    #[arg(short, long, global = true, conflicts_with = "quiet")]
     pub verbose: bool,
 
     /// Suppress non-essential output
@@ -39,7 +39,7 @@ pub struct Cli {
 
     /// Subcommand to execute
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 /// Available commands
@@ -53,9 +53,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: Option<ConfigCommand>,
     },
-
-    /// Show version information
-    Version,
 
     /// Manage OS service (launchd/systemd)
     Service {
@@ -86,10 +83,10 @@ pub enum ConfigCommand {
 /// Service management commands
 #[derive(Subcommand, Debug, Clone)]
 pub enum ServiceCommand {
-    /// Register and start as an OS service (常駐化)
+    /// Register and start as an OS service
     Register(RegisterArgs),
 
-    /// Stop and unregister the OS service (常駐化解除)
+    /// Stop and unregister the OS service
     Unregister(UnregisterArgs),
 
     /// Reload configuration (restart service)

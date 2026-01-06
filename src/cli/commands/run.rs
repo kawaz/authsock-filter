@@ -14,6 +14,7 @@ use crate::agent::{Proxy, Upstream};
 use crate::cli::args::RunArgs;
 use crate::config::{Config, ExpandedConfig, SocketConfig, find_config_file, load_config};
 use crate::filter::FilterEvaluator;
+use crate::utils::socket::{prepare_socket_path, set_socket_permissions};
 
 /// Execute the run command
 pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> {
@@ -105,26 +106,17 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
             Proxy::new_shared(upstream, Arc::new(filter)).with_socket_path(&socket_path_str),
         );
 
-        // Remove existing socket if present
-        if spec.path.exists() {
-            debug!(path = %spec.path.display(), "Removing existing socket file");
-            std::fs::remove_file(&spec.path).context(format!(
-                "Failed to remove existing socket at {}",
-                spec.path.display()
-            ))?;
-        }
-
-        // Ensure parent directory exists
-        if let Some(parent) = spec.path.parent()
-            && !parent.exists()
-        {
-            std::fs::create_dir_all(parent)
-                .context(format!("Failed to create directory {}", parent.display()))?;
-        }
+        // Prepare socket path (remove existing with symlink protection, create parent dir)
+        prepare_socket_path(&spec.path)
+            .context(format!("Failed to prepare socket at {}", spec.path.display()))?;
 
         // Bind listener
         let listener = UnixListener::bind(&spec.path)
             .context(format!("Failed to bind to socket {}", spec.path.display()))?;
+
+        // Set socket permissions to 0600 (owner read/write only)
+        set_socket_permissions(&spec.path)
+            .context(format!("Failed to set permissions on socket at {}", spec.path.display()))?;
 
         // Record inode for monitoring
         let inode = std::fs::metadata(&spec.path).ok().map(|m| m.ino());
@@ -166,7 +158,7 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
     );
 
     // Create shutdown channel for inode monitor
-    let (shutdown_tx, _shutdown_rx) = watch::channel(false);
+    let (shutdown_tx, _) = watch::channel(false);
 
     // Spawn inode monitoring task
     let socket_paths_for_monitor = socket_paths.clone();
