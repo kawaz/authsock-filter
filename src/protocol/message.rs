@@ -4,6 +4,14 @@ use crate::error::{Error, Result};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use ssh_key::{Fingerprint, HashAlg, PublicKey};
 
+/// Maximum number of identities allowed in a single message.
+/// This prevents malicious agents from causing excessive memory allocation.
+const MAX_IDENTITIES: u32 = 10000;
+
+/// Maximum size for a single key blob or comment (16 MB).
+/// Prevents memory exhaustion from malicious length fields.
+const MAX_BLOB_SIZE: u32 = 16 * 1024 * 1024;
+
 /// SSH Agent message types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -182,7 +190,22 @@ impl AgentMessage {
         }
 
         let count = buf.get_u32();
-        let mut identities = Vec::with_capacity(count as usize);
+
+        // Validate count to prevent excessive memory allocation
+        if count > MAX_IDENTITIES {
+            return Err(Error::InvalidMessage(format!(
+                "Identity count {} exceeds maximum allowed {}",
+                count, MAX_IDENTITIES
+            )));
+        }
+
+        let capacity = usize::try_from(count).map_err(|_| {
+            Error::InvalidMessage(format!(
+                "Identity count {} cannot be converted to usize",
+                count
+            ))
+        })?;
+        let mut identities = Vec::with_capacity(capacity);
 
         for _ in 0..count {
             // Read key blob
@@ -191,7 +214,19 @@ impl AgentMessage {
                     "Unexpected end of message".to_string(),
                 ));
             }
-            let key_len = buf.get_u32() as usize;
+            let key_len_u32 = buf.get_u32();
+            if key_len_u32 > MAX_BLOB_SIZE {
+                return Err(Error::InvalidMessage(format!(
+                    "Key blob size {} exceeds maximum allowed {}",
+                    key_len_u32, MAX_BLOB_SIZE
+                )));
+            }
+            let key_len = usize::try_from(key_len_u32).map_err(|_| {
+                Error::InvalidMessage(format!(
+                    "Key blob length {} cannot be converted to usize",
+                    key_len_u32
+                ))
+            })?;
             if buf.remaining() < key_len {
                 return Err(Error::InvalidMessage("Key blob truncated".to_string()));
             }
@@ -204,7 +239,19 @@ impl AgentMessage {
                     "Unexpected end of message".to_string(),
                 ));
             }
-            let comment_len = buf.get_u32() as usize;
+            let comment_len_u32 = buf.get_u32();
+            if comment_len_u32 > MAX_BLOB_SIZE {
+                return Err(Error::InvalidMessage(format!(
+                    "Comment size {} exceeds maximum allowed {}",
+                    comment_len_u32, MAX_BLOB_SIZE
+                )));
+            }
+            let comment_len = usize::try_from(comment_len_u32).map_err(|_| {
+                Error::InvalidMessage(format!(
+                    "Comment length {} cannot be converted to usize",
+                    comment_len_u32
+                ))
+            })?;
             if buf.remaining() < comment_len {
                 return Err(Error::InvalidMessage("Comment truncated".to_string()));
             }
@@ -218,9 +265,13 @@ impl AgentMessage {
     }
 
     /// Build an IdentitiesAnswer message from a list of identities
+    ///
+    /// # Panics
+    /// Panics if the number of identities exceeds u32::MAX (practically impossible).
     pub fn build_identities_answer(identities: &[Identity]) -> Self {
         let mut payload = BytesMut::new();
-        payload.put_u32(identities.len() as u32);
+        let count = u32::try_from(identities.len()).expect("identity count exceeds u32::MAX");
+        payload.put_u32(count);
 
         for identity in identities {
             payload.put_u32(identity.key_blob.len() as u32);
@@ -249,7 +300,19 @@ impl AgentMessage {
             return Err(Error::InvalidMessage("Message too short".to_string()));
         }
 
-        let key_len = buf.get_u32() as usize;
+        let key_len_u32 = buf.get_u32();
+        if key_len_u32 > MAX_BLOB_SIZE {
+            return Err(Error::InvalidMessage(format!(
+                "Key blob size {} exceeds maximum allowed {}",
+                key_len_u32, MAX_BLOB_SIZE
+            )));
+        }
+        let key_len = usize::try_from(key_len_u32).map_err(|_| {
+            Error::InvalidMessage(format!(
+                "Key blob length {} cannot be converted to usize",
+                key_len_u32
+            ))
+        })?;
         if buf.remaining() < key_len {
             return Err(Error::InvalidMessage("Key blob truncated".to_string()));
         }
