@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, bail};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 use super::detect_version_manager;
@@ -12,6 +12,99 @@ use crate::config::{find_config_file, load_config};
 // ============================================================================
 // Executable path resolution
 // ============================================================================
+
+/// Find executable candidates in PATH and known shim locations
+fn find_executable_candidates(name: &str) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Check PATH
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    for dir in path_var.split(':') {
+        let candidate = PathBuf::from(dir).join(name);
+        if let Some(path) = check_executable(&candidate)
+            && seen.insert(path.clone())
+        {
+            candidates.push(path);
+        }
+    }
+
+    // Check known shim/stable locations (mise, asdf, nix)
+    let shim_dirs = [
+        dirs::home_dir().map(|h| h.join(".local/share/mise/shims")),
+        dirs::home_dir().map(|h| h.join(".mise/shims")),
+        dirs::home_dir().map(|h| h.join(".asdf/shims")),
+        dirs::home_dir().map(|h| h.join(".nix-profile/bin")),
+    ];
+
+    for shim_dir in shim_dirs.into_iter().flatten() {
+        let candidate = shim_dir.join(name);
+        if let Some(path) = check_executable(&candidate)
+            && seen.insert(path.clone())
+        {
+            candidates.push(path);
+        }
+    }
+
+    candidates
+}
+
+/// Check if path is a known shim location
+fn is_shim_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    let shim_patterns = [
+        "/mise/shims/",
+        "/.mise/shims/",
+        "/asdf/shims/",
+        "/.asdf/shims/",
+    ];
+    shim_patterns.iter().any(|p| path_str.contains(p))
+}
+
+/// Compute simple hash of file for comparison
+fn file_hash(path: &Path) -> Option<u64> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::Hasher;
+    use std::io::Read;
+
+    let mut file = fs::File::open(path).ok()?;
+    let mut hasher = DefaultHasher::new();
+    let mut buf = [0u8; 8192];
+
+    loop {
+        let n = file.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        hasher.write(&buf[..n]);
+    }
+
+    Some(hasher.finish())
+}
+
+/// Check if path is an executable file, return the path as-is if valid
+/// (Don't canonicalize to preserve shim paths)
+fn check_executable(path: &Path) -> Option<PathBuf> {
+    if !path.exists() || !path.is_file() {
+        return None;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = path.metadata()
+            && meta.permissions().mode() & 0o111 != 0
+        {
+            return Some(path.to_path_buf());
+        }
+        None
+    }
+
+    #[cfg(not(unix))]
+    {
+        Some(path.to_path_buf())
+    }
+}
 
 /// Resolve the executable path for service registration
 fn resolve_service_executable(
@@ -51,12 +144,89 @@ fn resolve_service_executable(
                 current_exe.display()
             );
         } else {
-            bail!(
-                "Executable is under {} version manager: {}\n\
-                 Use --allow-versioned-path to proceed, or specify --executable with a stable path.",
+            // Find all executable candidates, current first
+            let mut candidates = vec![current_exe.clone()];
+            for c in find_executable_candidates("authsock-filter") {
+                if c != current_exe {
+                    candidates.push(c);
+                }
+            }
+
+            // Get canonical path of current exe for comparison
+            let current_canonical = current_exe.canonicalize().ok();
+            let current_hash = file_hash(&current_exe);
+
+            let mut msg = format!(
+                "Executable is under {} version manager: {}\n\nCandidates:\n",
                 info.name,
                 current_exe.display()
             );
+
+            for (i, path) in candidates.iter().enumerate() {
+                let mut positive_marks = Vec::new();
+                let mut negative_marks = Vec::new();
+                let is_current = path == &current_exe;
+                let version_info = detect_version_manager(path);
+
+                // Check if this is a known shim path
+                let is_shim = is_shim_path(path);
+                if is_shim {
+                    positive_marks.push("shim");
+                }
+
+                // Check if this is the current executable (positive)
+                if is_current {
+                    positive_marks.push("current");
+                } else if !is_shim {
+                    // Check if same target (symlink resolves to same file)
+                    let path_canonical = path.canonicalize().ok();
+                    if path_canonical.is_some() && path_canonical == current_canonical {
+                        positive_marks.push("same-target");
+                    } else if let Some(ref ch) = current_hash {
+                        // Check if same content (hash)
+                        if file_hash(path).as_ref() == Some(ch) {
+                            positive_marks.push("same-hash");
+                        }
+                    }
+                }
+
+                // Check if versioned or unstable path
+                if let Some(ref vi) = version_info {
+                    if vi.name == "temporary" {
+                        negative_marks.push("unstable-path");
+                    } else {
+                        negative_marks.push("versioned-path");
+                    }
+                }
+
+                // Build colored marker string
+                let mut marker_parts = Vec::new();
+                if !positive_marks.is_empty() {
+                    marker_parts.push(format!("\x1b[32m{}\x1b[0m", positive_marks.join(", ")));
+                }
+                if !negative_marks.is_empty() {
+                    marker_parts.push(format!("\x1b[31m{}\x1b[0m", negative_marks.join(", ")));
+                }
+
+                let marker = if marker_parts.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [{}]", marker_parts.join(", "))
+                };
+
+                // Highlight recommended paths (has positive marks, no negative marks)
+                let is_recommended = !positive_marks.is_empty() && negative_marks.is_empty();
+                let line = format!("  {}. {}{}", i + 1, path.display(), marker);
+                if is_recommended {
+                    msg.push_str(&format!("\x1b[32m{}\x1b[0m\n", line));
+                } else {
+                    msg.push_str(&format!("{}\n", line));
+                }
+            }
+
+            msg.push_str("\nUse --executable <PATH> or --force");
+
+            bail!("{}", msg);
         }
     }
 
@@ -149,6 +319,9 @@ mod systemd {
     }
 
     pub fn generate_unit(_name: &str, exe_path: &str, config_path: &str) -> String {
+        // Quote paths to handle spaces and special characters
+        let exe_quoted = shell_quote(exe_path);
+        let config_quoted = shell_quote(config_path);
         format!(
             r#"[Unit]
 Description=SSH agent proxy with key filtering
@@ -156,7 +329,7 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart={exe_path} run --config {config_path}
+ExecStart={exe_quoted} run --config {config_quoted}
 Restart=on-failure
 RestartSec=5
 
@@ -164,6 +337,17 @@ RestartSec=5
 WantedBy=default.target
 "#
         )
+    }
+
+    /// Quote a string for systemd ExecStart (handles spaces and special chars)
+    fn shell_quote(s: &str) -> String {
+        if s.contains(|c: char| c.is_whitespace() || c == '"' || c == '\\') {
+            // Escape backslashes and double quotes, then wrap in double quotes
+            let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+            format!("\"{}\"", escaped)
+        } else {
+            s.to_string()
+        }
     }
 }
 
@@ -173,7 +357,7 @@ WantedBy=default.target
 
 #[cfg(target_os = "macos")]
 pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> Result<()> {
-    let exe_path = resolve_service_executable(args.executable.clone(), args.allow_versioned_path)?;
+    let exe_path = resolve_service_executable(args.executable.clone(), args.force)?;
     let exe_path_str = exe_path.display().to_string();
     let config_path = get_config_path(config_override)?;
     let config_path_str = config_path.display().to_string();
@@ -283,7 +467,7 @@ pub async fn reload(args: UnregisterArgs) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> Result<()> {
-    let exe_path = resolve_service_executable(args.executable.clone(), args.allow_versioned_path)?;
+    let exe_path = resolve_service_executable(args.executable.clone(), args.force)?;
     let exe_path_str = exe_path.display().to_string();
     let config_path = get_config_path(config_override)?;
     let config_path_str = config_path.display().to_string();

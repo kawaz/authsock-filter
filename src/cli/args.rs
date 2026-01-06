@@ -74,6 +74,10 @@ pub struct ConfigArgs {
     #[arg(long)]
     pub example: bool,
 
+    /// Show config search paths
+    #[arg(long)]
+    pub paths: bool,
+
     /// Output format
     #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
     pub format: String,
@@ -94,9 +98,9 @@ pub struct RegisterArgs {
     #[arg(long, value_name = "PATH")]
     pub executable: Option<PathBuf>,
 
-    /// Allow registering with a version-managed path (may break after upgrade)
+    /// Force registration with non-recommended path
     #[arg(long)]
-    pub allow_versioned_path: bool,
+    pub force: bool,
 }
 
 /// Arguments for the `unregister` command

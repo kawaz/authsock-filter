@@ -19,7 +19,7 @@ pub struct VersionManagerInfo {
     pub suggestions: Vec<(PathBuf, bool)>,
 }
 
-/// Check if the path is under a version manager
+/// Check if the path is under a version manager or unstable location
 pub fn detect_version_manager(path: &Path) -> Option<VersionManagerInfo> {
     let path_str = path.to_string_lossy();
 
@@ -41,6 +41,43 @@ pub fn detect_version_manager(path: &Path) -> Option<VersionManagerInfo> {
                 name: manager,
                 current_path: path.to_path_buf(),
                 suggestions,
+            });
+        }
+    }
+
+    // Check if path contains own version (e.g., /0.1.18/)
+    // This catches unknown version managers
+    let version_pattern = format!("/{}/", crate::VERSION);
+    if path_str.contains(&version_pattern) {
+        return Some(VersionManagerInfo {
+            name: "unknown",
+            current_path: path.to_path_buf(),
+            suggestions: find_shim_suggestions(path),
+        });
+    }
+
+    // Check for temporary or development paths
+    // Each pattern is tested as both /{pattern}/ and /.{pattern}/
+    let unstable_patterns = [
+        "tmp",
+        "temp",
+        "target",
+        "debug",
+        "release",
+        "build",
+        "out",
+        "dist",
+        "cache",
+        "Downloads",
+    ];
+    for pattern in unstable_patterns {
+        let p1 = format!("/{}/", pattern);
+        let p2 = format!("/.{}/", pattern);
+        if path_str.contains(&p1) || path_str.contains(&p2) {
+            return Some(VersionManagerInfo {
+                name: "temporary",
+                current_path: path.to_path_buf(),
+                suggestions: find_shim_suggestions(path),
             });
         }
     }
