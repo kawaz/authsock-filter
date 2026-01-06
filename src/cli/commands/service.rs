@@ -706,11 +706,11 @@ pub async fn status(args: UnregisterArgs) -> Result<()> {
             "--user",
             "show",
             &args.name,
-            "--property=ActiveState,MainPID,ExecStart",
+            "--property=ActiveState,MainPID",
         ])
         .output();
 
-    let (pid, state, exec_start) = match output {
+    let (pid, state) = match output {
         Ok(o) if o.status.success() => {
             let stdout = String::from_utf8_lossy(&o.stdout);
             let pid = stdout
@@ -721,11 +721,7 @@ pub async fn status(args: UnregisterArgs) -> Result<()> {
                 .lines()
                 .find(|l| l.starts_with("ActiveState="))
                 .map(|l| l.strip_prefix("ActiveState=").unwrap_or("").to_string());
-            let exec_start = stdout
-                .lines()
-                .find(|l| l.starts_with("ExecStart="))
-                .map(|l| l.strip_prefix("ExecStart=").unwrap_or("").to_string());
-            (pid, state, exec_start)
+            (pid, state)
         }
         _ => {
             println!("Failed to get service status");
