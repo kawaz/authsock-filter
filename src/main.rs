@@ -21,7 +21,9 @@ async fn main() -> Result<()> {
         Commands::Run(args) => {
             authsock_filter::cli::commands::run::execute(args, cli.config).await?
         }
-        Commands::Config(args) => authsock_filter::cli::commands::config::execute(args).await?,
+        Commands::Config { command } => {
+            authsock_filter::cli::commands::config::execute(command, cli.config).await?
+        }
         Commands::Version => authsock_filter::cli::commands::version::execute().await?,
         Commands::Service { command } => match command {
             ServiceCommand::Register(args) => {

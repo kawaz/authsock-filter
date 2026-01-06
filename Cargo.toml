@@ -1,6 +1,6 @@
 [package]
 name = "authsock-filter"
-version = "0.1.25"
+version = "0.1.26"
 edition = "2024"
 description = "SSH agent proxy with filtering and logging"
 license = "MIT"
@@ -55,6 +55,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Path utilities
 dirs = "5"
 shellexpand = "3"
+shlex = "1"
 
 # Unix system calls
 [target.'cfg(unix)'.dependencies]

@@ -212,7 +212,9 @@ fn resolve_service_executable(
             }
 
             // Get argv[0] for command suggestions
-            let argv0 = std::env::args().next().unwrap_or_else(|| "authsock-filter".to_string());
+            let argv0 = std::env::args()
+                .next()
+                .unwrap_or_else(|| "authsock-filter".to_string());
 
             // Check if shim is available and suggest commands
             let shim_path = candidates.iter().find(|p| is_shim_path(p));
@@ -263,8 +265,6 @@ mod launchd {
         pub program_arguments: Vec<String>,
         pub run_at_load: bool,
         pub keep_alive: bool,
-        pub standard_out_path: String,
-        pub standard_error_path: String,
         pub environment_variables: HashMap<String, String>,
     }
 
@@ -298,8 +298,6 @@ mod launchd {
             program_arguments: args,
             run_at_load: true,
             keep_alive: true,
-            standard_out_path: format!("/tmp/{}.stdout.log", name),
-            standard_error_path: format!("/tmp/{}.stderr.log", name),
             environment_variables: env,
         };
 
@@ -478,54 +476,98 @@ pub async fn status(args: UnregisterArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("Plist: {}", plist_path.display());
-
-    // Get status from launchctl list (grep for our label)
-    let output = std::process::Command::new("launchctl")
-        .arg("list")
-        .output()
-        .context("Failed to run launchctl")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut found = false;
-
-    for line in stdout.lines() {
-        if line.contains(&label) {
-            // Format: "PID\tStatus\tLabel"
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() >= 3 {
-                let pid = parts[0];
-                let exit_status = parts[1];
-
-                if pid == "-" {
-                    println!("Status: \x1b[31mNot running\x1b[0m (exit: {})", exit_status);
-                } else {
-                    println!("Status: \x1b[32mRunning\x1b[0m (pid: {})", pid);
-                }
-            }
-            found = true;
-            break;
-        }
-    }
-
-    if !found {
-        println!("Status: \x1b[31mNot loaded\x1b[0m");
-    }
-
-    // Show how to get more details
+    // Get uid for launchctl print
     let uid = std::process::Command::new("id")
         .arg("-u")
         .output()
         .ok()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
+        .unwrap_or_else(|| "501".to_string());
 
+    let target = format!("gui/{}/{}", uid, label);
+
+    // Get launchctl print output
+    let output = std::process::Command::new("launchctl")
+        .args(["print", &target])
+        .output();
+
+    let stdout = match output {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => {
+            println!(
+                "Service is not loaded. Plist exists at: {}",
+                plist_path.display()
+            );
+            return Ok(());
+        }
+    };
+
+    // Parse launchctl output
+    let parse_field = |prefix: &str| -> Option<String> {
+        stdout
+            .lines()
+            .find(|l| l.trim().starts_with(prefix))
+            .map(|l| l.trim().strip_prefix(prefix).unwrap_or("").to_string())
+    };
+
+    let state = parse_field("state = ");
+    let pid = parse_field("pid = ");
+    let runs = parse_field("runs = ");
+    let last_exit = parse_field("last exit code = ");
+    let keepalive = stdout.contains("properties = ") && stdout.contains("keepalive");
+
+    // Status line
+    let status_str = match state.as_deref() {
+        Some("running") => format!(
+            "\x1b[32mRunning\x1b[0m (pid: {})",
+            pid.as_deref().unwrap_or("?")
+        ),
+        Some(s) => format!("\x1b[31m{}\x1b[0m", s),
+        None => "\x1b[31mUnknown\x1b[0m".to_string(),
+    };
+    println!("Status: {}", status_str);
+
+    // Additional info
+    if let Some(r) = runs {
+        print!("Runs: {}", r);
+        if let Some(exit) = last_exit {
+            print!(" (last exit: {})", exit);
+        }
+        println!();
+    }
+    println!("KeepAlive: {}", if keepalive { "yes" } else { "no" });
     println!();
-    println!("# For details:");
-    println!("launchctl print gui/{}/{}", uid, label);
+
+    // Get config path from plist
+    let plist_content = fs::read(&plist_path).ok();
+    let plist: Option<launchd::LaunchdPlist> = plist_content
+        .as_ref()
+        .and_then(|c| plist::from_bytes(c).ok());
+
+    if let Some(plist) = plist {
+        // Show command
+        println!("# Command:");
+        println!("{}", plist.program_arguments.join(" "));
+        println!();
+
+        // Get config path from arguments
+        let config_idx = plist.program_arguments.iter().position(|a| a == "--config");
+        if let Some(idx) = config_idx {
+            if let Some(cfg_path) = plist.program_arguments.get(idx + 1) {
+                // Load and display config as CLI format
+                if let Ok(config_file) = load_config(Path::new(cfg_path)) {
+                    println!("# Filter config ({}):", cfg_path);
+                    print_config_as_cli(&plist.program_arguments[0], &config_file.config);
+                }
+            }
+        }
+    }
 
     Ok(())
 }
+
+// Use shared implementation from config module
+use super::config::print_config_as_cli;
 
 // ============================================================================
 // Public API - Linux
@@ -661,39 +703,73 @@ pub async fn status(args: UnregisterArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("Unit: {}", unit_path.display());
-
-    // Get status from systemctl is-active
+    // Get status from systemctl
     let output = std::process::Command::new("systemctl")
-        .args(["--user", "is-active", &args.name])
+        .args([
+            "--user",
+            "show",
+            &args.name,
+            "--property=ActiveState,MainPID,ExecStart",
+        ])
         .output();
 
-    let is_active = output
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let (pid, state, exec_start) = match output {
+        Ok(o) if o.status.success() => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let pid = stdout
+                .lines()
+                .find(|l| l.starts_with("MainPID="))
+                .map(|l| l.strip_prefix("MainPID=").unwrap_or("").to_string());
+            let state = stdout
+                .lines()
+                .find(|l| l.starts_with("ActiveState="))
+                .map(|l| l.strip_prefix("ActiveState=").unwrap_or("").to_string());
+            let exec_start = stdout
+                .lines()
+                .find(|l| l.starts_with("ExecStart="))
+                .map(|l| l.strip_prefix("ExecStart=").unwrap_or("").to_string());
+            (pid, state, exec_start)
+        }
+        _ => {
+            println!("Failed to get service status");
+            return Ok(());
+        }
+    };
 
-    if is_active == "active" {
-        // Get PID
-        let pid_output = std::process::Command::new("systemctl")
-            .args(["--user", "show", &args.name, "--property=MainPID", "--value"])
-            .output();
-
-        let pid = pid_output
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default();
-
-        println!("Status: \x1b[32mRunning\x1b[0m (pid: {})", pid);
-    } else {
-        println!("Status: \x1b[31m{}\x1b[0m", is_active);
-    }
-
+    // Status line
+    let status_str = match state.as_deref() {
+        Some("active") => format!("\x1b[32mRunning\x1b[0m (pid: {})", pid.unwrap_or_default()),
+        Some(s) => format!("\x1b[31m{}\x1b[0m", s),
+        None => "\x1b[31mUnknown\x1b[0m".to_string(),
+    };
+    println!("Status: {}", status_str);
     println!();
-    println!("# For details:");
-    println!("systemctl --user status {}", args.name);
+
+    // Show command from unit file
+    let unit_content = fs::read_to_string(&unit_path).ok();
+    if let Some(content) = unit_content {
+        for line in content.lines() {
+            if let Some(cmd) = line.strip_prefix("ExecStart=") {
+                println!("# Command:");
+                println!("{}", cmd);
+                println!();
+
+                // Extract config path and show filter config
+                if let Some(config_idx) = cmd.find("--config") {
+                    let rest = &cmd[config_idx + 9..];
+                    let config_path = rest.split_whitespace().next().unwrap_or("");
+                    let config_path = config_path.trim_matches('"');
+                    if let Ok(config_file) = load_config(Path::new(config_path)) {
+                        let exe = cmd.split_whitespace().next().unwrap_or("authsock-filter");
+                        let exe = exe.trim_matches('"');
+                        println!("# Filter config ({}):", config_path);
+                        print_config_as_cli(exe, &config_file.config);
+                    }
+                }
+                break;
+            }
+        }
+    }
 
     Ok(())
 }

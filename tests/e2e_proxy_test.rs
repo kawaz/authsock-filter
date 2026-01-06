@@ -113,7 +113,7 @@ async fn test_proxy_filters_by_comment() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: only allow work keys
-    let filter = FilterEvaluator::parse(&["comment=*@work*".to_string()]).unwrap();
+    let filter = FilterEvaluator::parse(&[vec!["comment=*@work*".to_string()]]).unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
@@ -149,7 +149,7 @@ async fn test_proxy_filters_by_negation() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: exclude work keys
-    let filter = FilterEvaluator::parse(&["not-comment=*@work*".to_string()]).unwrap();
+    let filter = FilterEvaluator::parse(&[vec!["not-comment=*@work*".to_string()]]).unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
@@ -212,10 +212,10 @@ async fn test_proxy_filters_multiple_rules() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: work keys but not dev
-    let filter = FilterEvaluator::parse(&[
+    let filter = FilterEvaluator::parse(&[vec![
         "comment=*@work*".to_string(),
         "not-comment=dev@*".to_string(),
-    ])
+    ]])
     .unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
@@ -251,7 +251,7 @@ async fn test_proxy_filters_by_fingerprint() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: only allow specific fingerprint (auto-detected)
-    let filter = FilterEvaluator::parse(&[fingerprint]).unwrap();
+    let filter = FilterEvaluator::parse(&[vec![fingerprint]]).unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
@@ -282,7 +282,7 @@ async fn test_proxy_filters_by_key_type() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: only allow ed25519
-    let filter = FilterEvaluator::parse(&["type=ed25519".to_string()]).unwrap();
+    let filter = FilterEvaluator::parse(&[vec!["type=ed25519".to_string()]]).unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 
@@ -312,7 +312,7 @@ async fn test_proxy_excludes_by_key_type() {
     start_mock_agent(&upstream_path, identities).await;
 
     // Create filter: exclude ed25519 (should return nothing)
-    let filter = FilterEvaluator::parse(&["not-type=ed25519".to_string()]).unwrap();
+    let filter = FilterEvaluator::parse(&[vec!["not-type=ed25519".to_string()]]).unwrap();
     let upstream = Upstream::new(upstream_path.to_str().unwrap());
     let proxy = Arc::new(Proxy::new(upstream, filter));
 

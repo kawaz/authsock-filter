@@ -8,7 +8,7 @@ pub mod commands;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use args::{CompletionArgs, ConfigArgs, RegisterArgs, RunArgs, UnregisterArgs};
+use args::{CompletionArgs, RegisterArgs, RunArgs, UnregisterArgs};
 
 /// SSH agent proxy with key filtering
 #[derive(Parser, Debug)]
@@ -48,8 +48,11 @@ pub enum Commands {
     /// Run the proxy in the foreground
     Run(RunArgs),
 
-    /// Show or validate configuration
-    Config(ConfigArgs),
+    /// Manage configuration file
+    Config {
+        #[command(subcommand)]
+        command: Option<ConfigCommand>,
+    },
 
     /// Show version information
     Version,
@@ -62,6 +65,22 @@ pub enum Commands {
 
     /// Generate shell completions
     Completion(CompletionArgs),
+}
+
+/// Config management commands
+#[derive(Subcommand, Debug, Clone)]
+pub enum ConfigCommand {
+    /// Show configuration content (default)
+    Show,
+
+    /// Open configuration in editor
+    Edit,
+
+    /// Print configuration file path
+    Path,
+
+    /// Output as CLI command arguments
+    Command,
 }
 
 /// Service management commands

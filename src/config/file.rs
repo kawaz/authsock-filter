@@ -307,8 +307,7 @@ filters = ["comment=~@work\\.example\\.com$"]
 [sockets.personal]
 path = "~/.ssh/personal-agent.sock"
 filters = [
-    "github=kawaz",
-    "type=ed25519",
+    ["github=kawaz", "type=ed25519"],
 ]
 
 [github]
@@ -322,9 +321,13 @@ timeout = "10s"
         assert_eq!(config_file.config.sockets.len(), 2);
 
         let work = config_file.config.sockets.get("work").unwrap();
+        // Single string → one OR term (single-element AND group)
         assert_eq!(work.filters.len(), 1);
+        assert_eq!(work.filters[0].len(), 1);
 
         let personal = config_file.config.sockets.get("personal").unwrap();
-        assert_eq!(personal.filters.len(), 2);
+        // Array → one AND group with two filters
+        assert_eq!(personal.filters.len(), 1);
+        assert_eq!(personal.filters[0].len(), 2);
     }
 }

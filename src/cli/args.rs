@@ -63,26 +63,6 @@ impl RunArgs {
     }
 }
 
-/// Arguments for the `config` command
-#[derive(Args, Debug, Clone)]
-pub struct ConfigArgs {
-    /// Validate configuration only
-    #[arg(long)]
-    pub validate: bool,
-
-    /// Show example configuration
-    #[arg(long)]
-    pub example: bool,
-
-    /// Show config search paths
-    #[arg(long)]
-    pub paths: bool,
-
-    /// Output format
-    #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
-    pub format: String,
-}
-
 /// Arguments for the `register` command
 #[derive(Args, Debug, Clone)]
 pub struct RegisterArgs {

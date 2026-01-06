@@ -214,7 +214,12 @@ fn load_configuration(args: &RunArgs, config_path: Option<PathBuf>) -> Result<Ex
                     ExpandedSocketConfig {
                         path: spec.path.clone(),
                         upstream: socket_upstream.clone(),
-                        filters: spec.filters.clone(),
+                        // CLI args are a single AND group
+                        filters: if spec.filters.is_empty() {
+                            vec![]
+                        } else {
+                            vec![spec.filters.clone()]
+                        },
                     },
                 );
             }
@@ -294,7 +299,12 @@ fn print_config_from_args(args: &RunArgs) -> Result<()> {
                 SocketConfig {
                     path: spec.path.to_string_lossy().to_string(),
                     upstream: socket_upstream.clone(),
-                    filters: spec.filters.clone(),
+                    // CLI args are a single AND group
+                    filters: if spec.filters.is_empty() {
+                        vec![]
+                    } else {
+                        vec![spec.filters.clone()]
+                    },
                 },
             );
         }

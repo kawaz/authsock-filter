@@ -43,8 +43,67 @@ pub struct SocketConfig {
     pub upstream: Option<String>,
 
     /// Filter rules for this socket
-    #[serde(default)]
-    pub filters: Vec<String>,
+    /// Mixed format: strings are single OR terms, arrays are AND groups
+    /// e.g., ["f1", "f2", ["f3", "f4"]] means f1 || f2 || (f3 && f4)
+    #[serde(default, deserialize_with = "deserialize_filters")]
+    pub filters: Vec<Vec<String>>,
+}
+
+/// Custom deserializer for filters:
+/// - `"f1"` → single filter (OR term)
+/// - `["f1", "f2"]` → AND group
+/// - `["f1", ["f2", "f3"]]` → f1 || (f2 && f3)
+fn deserialize_filters<'de, D>(deserializer: D) -> Result<Vec<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, SeqAccess, Visitor};
+    use std::fmt;
+
+    struct FiltersVisitor;
+
+    impl<'de> Visitor<'de> for FiltersVisitor {
+        type Value = Vec<Vec<String>>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a sequence of strings or arrays of strings")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut result = Vec::new();
+
+            while let Some(value) = seq.next_element::<toml::Value>()? {
+                match value {
+                    toml::Value::String(s) => {
+                        // Single string → single-element AND group (OR term)
+                        result.push(vec![s]);
+                    }
+                    toml::Value::Array(arr) => {
+                        // Array → AND group
+                        let group: Vec<String> = arr
+                            .into_iter()
+                            .map(|v| {
+                                v.as_str()
+                                    .map(|s| s.to_string())
+                                    .ok_or_else(|| de::Error::custom("expected string in filter group"))
+                            })
+                            .collect::<Result<_, _>>()?;
+                        result.push(group);
+                    }
+                    _ => {
+                        return Err(de::Error::custom("expected string or array of strings"));
+                    }
+                }
+            }
+
+            Ok(result)
+        }
+    }
+
+    deserializer.deserialize_seq(FiltersVisitor)
 }
 
 /// GitHub API configuration
@@ -150,8 +209,8 @@ pub struct ExpandedSocketConfig {
     /// Resolved upstream path (if overridden for this socket)
     pub upstream: Option<PathBuf>,
 
-    /// Filter rules for this socket
-    pub filters: Vec<String>,
+    /// Filter rules for this socket (outer: OR, inner: AND)
+    pub filters: Vec<Vec<String>>,
 }
 
 /// GitHub configuration with parsed durations
@@ -303,8 +362,7 @@ filters = ["comment=~@work\\.example\\.com$"]
 [sockets.personal]
 path = "~/.ssh/personal-agent.sock"
 filters = [
-    "github=kawaz",
-    "type=ed25519",
+    ["github=kawaz", "type=ed25519"],
 ]
 
 [github]
@@ -318,11 +376,19 @@ timeout = "10s"
 
         let work = config.sockets.get("work").unwrap();
         assert_eq!(work.path, "$XDG_RUNTIME_DIR/authsock-filter/work.sock");
-        assert_eq!(work.filters, vec!["comment=~@work\\.example\\.com$"]);
+        // Single AND group
+        assert_eq!(
+            work.filters,
+            vec![vec!["comment=~@work\\.example\\.com$".to_string()]]
+        );
 
         let personal = config.sockets.get("personal").unwrap();
         assert_eq!(personal.path, "~/.ssh/personal-agent.sock");
-        assert_eq!(personal.filters, vec!["github=kawaz", "type=ed25519"]);
+        // Single AND group with two filters
+        assert_eq!(
+            personal.filters,
+            vec![vec!["github=kawaz".to_string(), "type=ed25519".to_string()]]
+        );
 
         assert_eq!(config.github.cache_ttl, "1h");
         assert_eq!(config.github.timeout, "10s");
