@@ -19,8 +19,7 @@ pub struct KeyfileMatcher {
 impl KeyfileMatcher {
     /// Create a new keyfile matcher
     pub fn new(path: &str) -> Result<Self> {
-        let expanded = shellexpand::tilde(path);
-        let path = PathBuf::from(expanded.as_ref());
+        let path = crate::utils::path::expand_to_pathbuf(path)?;
 
         let matcher = Self {
             path,

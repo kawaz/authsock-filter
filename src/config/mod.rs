@@ -5,11 +5,12 @@
 
 mod file;
 
+use crate::utils::path::expand_path;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub use file::{ConfigFile, find_config_file, load_config};
+pub use file::{ConfigFile, ConfigPath, config_search_paths, find_config_file, load_config};
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,14 +162,6 @@ pub struct ExpandedGithubConfig {
 
     /// Timeout as Duration
     pub timeout: std::time::Duration,
-}
-
-/// Expand environment variables and tilde in a path string
-pub fn expand_path(path: &str) -> crate::Result<String> {
-    // Use shellexpand for both env vars and tilde expansion
-    shellexpand::full(path)
-        .map(|s| s.into_owned())
-        .map_err(|e| crate::Error::Config(format!("Failed to expand path '{}': {}", path, e)))
 }
 
 /// Parse a duration string like "1h", "30m", "10s", "1d"

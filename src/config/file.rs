@@ -17,57 +17,111 @@ pub struct ConfigFile {
     pub config: Config,
 }
 
+/// Configuration file search path with description
+#[derive(Debug, Clone)]
+pub struct ConfigPath {
+    /// The actual file path
+    pub path: PathBuf,
+    /// Human-readable description for display
+    pub description: &'static str,
+}
+
 /// Standard configuration file name
 const CONFIG_FILE_NAME: &str = "config.toml";
 
 /// Application name for directory paths
 const APP_NAME: &str = "authsock-filter";
 
-/// Find the configuration file in standard locations
+/// Get all configuration search paths with descriptions (in priority order)
 ///
 /// Search order:
-/// 1. `$XDG_CONFIG_HOME/authsock-filter/config.toml` (or `~/.config/authsock-filter/config.toml`)
-/// 2. `~/.authsock-filter/config.toml`
-/// 3. `~/.authsock-filter.toml`
+/// 1. `$XDG_CONFIG_HOME/authsock-filter/config.toml` (if env var set)
+/// 2. `~/Library/Application Support/authsock-filter/config.toml` (macOS)
+/// 3. `~/.config/authsock-filter/config.toml` (cross-platform fallback)
+/// 4. `~/.authsock-filter/config.toml`
+/// 5. `~/.authsock-filter.toml`
+/// 6. `/etc/authsock-filter/config.toml` (Unix system-wide)
+pub fn config_search_paths() -> Vec<ConfigPath> {
+    let mut paths = Vec::new();
+
+    // 1. XDG_CONFIG_HOME (explicit env var takes priority)
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        paths.push(ConfigPath {
+            path: PathBuf::from(xdg).join(APP_NAME).join(CONFIG_FILE_NAME),
+            description: "$XDG_CONFIG_HOME/authsock-filter/config.toml",
+        });
+    }
+
+    // 2. Platform-specific config directory
+    #[cfg(target_os = "macos")]
+    if let Some(home) = dirs::home_dir() {
+        paths.push(ConfigPath {
+            path: home
+                .join("Library/Application Support")
+                .join(APP_NAME)
+                .join(CONFIG_FILE_NAME),
+            description: "~/Library/Application Support/authsock-filter/config.toml",
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    if std::env::var("XDG_CONFIG_HOME").is_err() {
+        if let Some(home) = dirs::home_dir() {
+            paths.push(ConfigPath {
+                path: home.join(".config").join(APP_NAME).join(CONFIG_FILE_NAME),
+                description: "~/.config/authsock-filter/config.toml",
+            });
+        }
+    }
+
+    // 3. ~/.config fallback (cross-platform, avoid duplicate)
+    if let Some(home) = dirs::home_dir() {
+        let dotconfig = home.join(".config").join(APP_NAME).join(CONFIG_FILE_NAME);
+        if !paths.iter().any(|p| p.path == dotconfig) {
+            paths.push(ConfigPath {
+                path: dotconfig,
+                description: "~/.config/authsock-filter/config.toml",
+            });
+        }
+    }
+
+    // 4-5. Home directory based locations
+    if let Some(home) = dirs::home_dir() {
+        paths.push(ConfigPath {
+            path: home.join(format!(".{}", APP_NAME)).join(CONFIG_FILE_NAME),
+            description: "~/.authsock-filter/config.toml",
+        });
+        paths.push(ConfigPath {
+            path: home.join(format!(".{}.toml", APP_NAME)),
+            description: "~/.authsock-filter.toml",
+        });
+    }
+
+    // 6. System-wide (Unix only)
+    #[cfg(unix)]
+    {
+        paths.push(ConfigPath {
+            path: PathBuf::from("/etc").join(APP_NAME).join(CONFIG_FILE_NAME),
+            description: "/etc/authsock-filter/config.toml",
+        });
+    }
+
+    paths
+}
+
+/// Find the configuration file in standard locations
 ///
 /// Returns `None` if no configuration file is found.
 pub fn find_config_file() -> Option<PathBuf> {
-    let candidates = config_file_candidates();
-
-    for path in candidates {
-        if path.exists() && path.is_file() {
-            tracing::debug!("Found configuration file at: {}", path.display());
-            return Some(path);
+    for cp in config_search_paths() {
+        if cp.path.exists() && cp.path.is_file() {
+            tracing::info!(path = %cp.path.display(), "Found configuration file");
+            return Some(cp.path);
         }
     }
 
     tracing::debug!("No configuration file found in standard locations");
     None
-}
-
-/// Get all candidate paths for configuration files
-fn config_file_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-
-    // XDG config directory (or ~/.config)
-    if let Some(config_dir) = dirs::config_dir() {
-        candidates.push(config_dir.join(APP_NAME).join(CONFIG_FILE_NAME));
-    }
-
-    // Home directory based locations
-    if let Some(home_dir) = dirs::home_dir() {
-        // ~/.authsock-filter/config.toml
-        candidates.push(
-            home_dir
-                .join(format!(".{}", APP_NAME))
-                .join(CONFIG_FILE_NAME),
-        );
-
-        // ~/.authsock-filter.toml
-        candidates.push(home_dir.join(format!(".{}.toml", APP_NAME)));
-    }
-
-    candidates
 }
 
 /// Load configuration from the specified path
@@ -128,20 +182,30 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_config_file_candidates() {
-        let candidates = config_file_candidates();
-        assert!(!candidates.is_empty());
+    fn test_config_search_paths() {
+        let paths = config_search_paths();
+        assert!(!paths.is_empty());
 
-        // All candidates should be absolute paths
-        for path in &candidates {
-            assert!(path.is_absolute(), "Path should be absolute: {:?}", path);
+        // All paths should be absolute
+        for cp in &paths {
+            assert!(
+                cp.path.is_absolute(),
+                "Path should be absolute: {:?}",
+                cp.path
+            );
+            assert!(
+                !cp.description.is_empty(),
+                "Description should not be empty"
+            );
         }
 
         // Check that expected patterns exist
-        let has_xdg_config = candidates
-            .iter()
-            .any(|p| p.to_string_lossy().contains("authsock-filter/config.toml"));
-        assert!(has_xdg_config, "Should have XDG config path");
+        let has_config_path = paths.iter().any(|p| {
+            p.path
+                .to_string_lossy()
+                .contains("authsock-filter/config.toml")
+        });
+        assert!(has_config_path, "Should have config path");
     }
 
     #[test]

@@ -5,109 +5,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::info;
 
-use super::detect_version_manager;
 use crate::cli::args::{RegisterArgs, UnregisterArgs};
 use crate::config::{find_config_file, load_config};
+use crate::utils::version_manager::{
+    detect_version_manager, find_executable_candidates, is_shim_path, resolve_shim_executable,
+};
 
 // ============================================================================
 // Executable path resolution
 // ============================================================================
-
-/// Find executable candidates in PATH and known shim locations
-fn find_executable_candidates(name: &str) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-
-    // Check PATH
-    let path_var = std::env::var("PATH").unwrap_or_default();
-    for dir in path_var.split(':') {
-        let candidate = PathBuf::from(dir).join(name);
-        if let Some(path) = check_executable(&candidate)
-            && seen.insert(path.clone())
-        {
-            candidates.push(path);
-        }
-    }
-
-    // Check known shim/stable locations (mise, asdf, nix)
-    let shim_dirs = [
-        dirs::home_dir().map(|h| h.join(".local/share/mise/shims")),
-        dirs::home_dir().map(|h| h.join(".mise/shims")),
-        dirs::home_dir().map(|h| h.join(".asdf/shims")),
-        dirs::home_dir().map(|h| h.join(".nix-profile/bin")),
-    ];
-
-    for shim_dir in shim_dirs.into_iter().flatten() {
-        let candidate = shim_dir.join(name);
-        if let Some(path) = check_executable(&candidate)
-            && seen.insert(path.clone())
-        {
-            candidates.push(path);
-        }
-    }
-
-    candidates
-}
-
-/// Check if path is a known shim location
-fn is_shim_path(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    let shim_patterns = [
-        "/mise/shims/",
-        "/.mise/shims/",
-        "/asdf/shims/",
-        "/.asdf/shims/",
-    ];
-    shim_patterns.iter().any(|p| path_str.contains(p))
-}
-
-/// Get the actual executable path that a shim resolves to
-fn resolve_shim_executable(shim_path: &Path) -> Option<PathBuf> {
-    let name = shim_path.file_name()?.to_str()?;
-    let shim_str = shim_path.to_string_lossy();
-
-    // Try version manager's which command first (more reliable)
-    let which_result = if shim_str.contains("/mise/shims/") || shim_str.contains("/.mise/shims/") {
-        std::process::Command::new("mise")
-            .args(["which", name])
-            .output()
-            .ok()
-    } else if shim_str.contains("/asdf/shims/") || shim_str.contains("/.asdf/shims/") {
-        std::process::Command::new("asdf")
-            .args(["which", name])
-            .output()
-            .ok()
-    } else {
-        None
-    };
-
-    if let Some(output) = which_result {
-        if output.status.success() {
-            let path_str = String::from_utf8_lossy(&output.stdout);
-            let path = PathBuf::from(path_str.trim());
-            if path.exists() {
-                return Some(path);
-            }
-        }
-    }
-
-    // Fallback: try executing the shim with version command and parse Executable line
-    let output = std::process::Command::new(shim_path)
-        .arg("version")
-        .output()
-        .ok()?;
-
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if let Some(path_str) = line.strip_prefix("  Executable: ") {
-                return Some(PathBuf::from(path_str.trim()));
-            }
-        }
-    }
-
-    None
-}
 
 /// Compute simple hash of file for comparison
 fn file_hash(path: &Path) -> Option<u64> {
@@ -128,30 +34,6 @@ fn file_hash(path: &Path) -> Option<u64> {
     }
 
     Some(hasher.finish())
-}
-
-/// Check if path is an executable file, return the path as-is if valid
-/// (Don't canonicalize to preserve shim paths)
-fn check_executable(path: &Path) -> Option<PathBuf> {
-    if !path.exists() || !path.is_file() {
-        return None;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(meta) = path.metadata()
-            && meta.permissions().mode() & 0o111 != 0
-        {
-            return Some(path.to_path_buf());
-        }
-        None
-    }
-
-    #[cfg(not(unix))]
-    {
-        Some(path.to_path_buf())
-    }
 }
 
 /// Resolve the executable path for service registration
@@ -279,10 +161,10 @@ fn resolve_service_executable(
                         // Regular file - check if same target or hash
                         if path_canonical.is_some() && path_canonical == current_canonical {
                             positive_marks.push("same-target".to_string());
-                        } else if let Some(ref ch) = current_hash {
-                            if file_hash(path).as_ref() == Some(ch) {
-                                positive_marks.push("same-hash".to_string());
-                            }
+                        } else if let Some(ref ch) = current_hash
+                            && file_hash(path).as_ref() == Some(ch)
+                        {
+                            positive_marks.push("same-hash".to_string());
                         }
                     }
                 }
@@ -300,17 +182,11 @@ fn resolve_service_executable(
                 let mut marker_parts = Vec::new();
                 // Add shim info (shim: in green, path in default color)
                 if let Some((ref resolved, _)) = shim_info {
-                    marker_parts.push(format!(
-                        "\x1b[32mshim:\x1b[0m{}",
-                        resolved.display()
-                    ));
+                    marker_parts.push(format!("\x1b[32mshim:\x1b[0m{}", resolved.display()));
                 }
                 // Add symlink info (symlink: in green, path in default color)
                 if let Some((ref target, _)) = symlink_info {
-                    marker_parts.push(format!(
-                        "\x1b[32msymlink:\x1b[0m{}",
-                        target.display()
-                    ));
+                    marker_parts.push(format!("\x1b[32msymlink:\x1b[0m{}", target.display()));
                 }
                 if !positive_marks.is_empty() {
                     marker_parts.push(format!("\x1b[32m{}\x1b[0m", positive_marks.join(", ")));

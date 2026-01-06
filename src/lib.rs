@@ -10,6 +10,7 @@ pub mod config;
 pub mod error;
 pub mod filter;
 pub mod protocol;
+pub mod utils;
 
 pub use error::{Error, Result};
 
