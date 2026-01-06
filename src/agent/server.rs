@@ -4,16 +4,11 @@
 //! connections and spawns proxy handlers for each connection.
 
 use crate::error::{Error, Result};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::watch;
 use tracing::{debug, error, info, trace, warn};
-
-/// Interval for checking socket file inode
-const SOCKET_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Unix socket server for accepting SSH agent client connections
 pub struct Server {
@@ -21,8 +16,6 @@ pub struct Server {
     socket_path: PathBuf,
     /// The listener (created on bind)
     listener: Option<UnixListener>,
-    /// Original inode of the socket file (for detecting if it was replaced)
-    original_inode: Option<u64>,
 }
 
 impl Server {
@@ -34,7 +27,6 @@ impl Server {
         Self {
             socket_path: socket_path.as_ref().to_path_buf(),
             listener: None,
-            original_inode: None,
         }
     }
 
@@ -82,26 +74,9 @@ impl Server {
             ))
         })?;
 
-        // Record the inode for later detection of socket replacement
-        self.original_inode = std::fs::metadata(&self.socket_path).ok().map(|m| m.ino());
-
-        info!(path = %self.socket_path.display(), inode = ?self.original_inode, "Server listening");
+        info!(path = %self.socket_path.display(), "Server listening");
         self.listener = Some(listener);
         Ok(())
-    }
-
-    /// Get the current inode of the socket file, if it exists
-    fn current_inode(&self) -> Option<u64> {
-        std::fs::metadata(&self.socket_path).ok().map(|m| m.ino())
-    }
-
-    /// Check if the socket file has been replaced or removed
-    fn socket_changed(&self) -> bool {
-        match (self.original_inode, self.current_inode()) {
-            (Some(orig), Some(curr)) => orig != curr,
-            (Some(_), None) => true, // Socket was removed
-            _ => false,
-        }
     }
 
     /// Accept the next client connection
@@ -124,8 +99,7 @@ impl Server {
 
     /// Run the server with a connection handler
     ///
-    /// This method runs until the shutdown signal is received or the socket
-    /// is replaced/removed by another process.
+    /// This method runs until the shutdown signal is received.
     ///
     /// # Arguments
     /// * `handler` - Async function to handle each client connection
@@ -145,7 +119,6 @@ impl Server {
             .ok_or_else(|| Error::Socket("Server is not bound".to_string()))?;
 
         let handler = Arc::new(handler);
-        let mut check_interval = tokio::time::interval(SOCKET_CHECK_INTERVAL);
 
         loop {
             tokio::select! {
@@ -154,20 +127,6 @@ impl Server {
                     if *shutdown_rx.borrow() {
                         info!("Received shutdown signal, stopping server");
                         break;
-                    }
-                }
-
-                // Periodic check for socket file changes
-                _ = check_interval.tick() => {
-                    if self.socket_changed() {
-                        info!(
-                            path = %self.socket_path.display(),
-                            "Socket file was replaced or removed, exiting"
-                        );
-                        return Err(Error::Socket(format!(
-                            "Socket {} was replaced or removed by another process",
-                            self.socket_path.display()
-                        )));
                     }
                 }
 

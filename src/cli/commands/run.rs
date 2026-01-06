@@ -1,11 +1,14 @@
 //! Run command - execute the proxy in the foreground
 
 use anyhow::{Context, Result, bail};
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::UnixListener;
 use tokio::signal;
-use tracing::{debug, error, info};
+use tokio::sync::watch;
+use tracing::{debug, error, info, warn};
 
 use crate::agent::{Proxy, Upstream};
 use crate::cli::args::RunArgs;
@@ -123,13 +126,16 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         let listener = UnixListener::bind(&spec.path)
             .context(format!("Failed to bind to socket {}", spec.path.display()))?;
 
+        // Record inode for monitoring
+        let inode = std::fs::metadata(&spec.path).ok().map(|m| m.ino());
         info!(
             path = %spec.path.display(),
             upstream = %upstream_path.display(),
+            inode = ?inode,
             "Listening on socket"
         );
 
-        socket_paths.push(spec.path.clone());
+        socket_paths.push((spec.path.clone(), inode));
 
         // Spawn task to handle connections
         let handle = tokio::spawn(async move {
@@ -159,12 +165,51 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         "Proxy server started. Press Ctrl+C to stop."
     );
 
-    // Wait for shutdown signal
-    signal::ctrl_c()
-        .await
-        .context("Failed to listen for shutdown signal")?;
+    // Create shutdown channel for inode monitor
+    let (shutdown_tx, _shutdown_rx) = watch::channel(false);
 
-    info!("Received shutdown signal, stopping...");
+    // Spawn inode monitoring task
+    let socket_paths_for_monitor = socket_paths.clone();
+    let monitor_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        loop {
+            interval.tick().await;
+            for (path, original_inode) in &socket_paths_for_monitor {
+                let current_inode = std::fs::metadata(path).ok().map(|m| m.ino());
+                match (original_inode, current_inode) {
+                    (Some(orig), Some(curr)) if *orig != curr => {
+                        warn!(
+                            path = %path.display(),
+                            original = orig,
+                            current = curr,
+                            "Socket inode changed, exiting"
+                        );
+                        return true; // Signal to exit
+                    }
+                    (Some(_), None) => {
+                        warn!(path = %path.display(), "Socket file removed, exiting");
+                        return true; // Signal to exit
+                    }
+                    _ => {}
+                }
+            }
+        }
+    });
+
+    // Wait for shutdown signal or inode change
+    tokio::select! {
+        _ = signal::ctrl_c() => {
+            info!("Received shutdown signal, stopping...");
+        }
+        result = monitor_handle => {
+            if result.unwrap_or(false) {
+                info!("Socket file changed, stopping...");
+            }
+        }
+    }
+
+    // Signal shutdown
+    let _ = shutdown_tx.send(true);
 
     // Cancel all listener tasks
     for handle in handles {
@@ -172,7 +217,7 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
     }
 
     // Clean up socket files
-    for path in socket_paths {
+    for (path, _) in socket_paths {
         if path.exists() {
             if let Err(e) = std::fs::remove_file(&path) {
                 debug!(path = %path.display(), error = %e, "Failed to remove socket file");
