@@ -6,8 +6,12 @@
 use crate::error::{Error, Result};
 use crate::protocol::{AgentCodec, AgentMessage};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::net::UnixStream;
 use tracing::{debug, trace};
+
+/// Default connection timeout for upstream agent
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Connection to an upstream SSH agent
 pub struct Upstream {
@@ -49,9 +53,21 @@ impl Upstream {
         &self.socket_path
     }
 
-    /// Connect to the upstream agent
+    /// Connect to the upstream agent with timeout
     pub async fn connect(&self) -> Result<UpstreamConnection> {
-        let stream = UnixStream::connect(&self.socket_path).await.map_err(|e| {
+        let stream = tokio::time::timeout(
+            DEFAULT_CONNECT_TIMEOUT,
+            UnixStream::connect(&self.socket_path),
+        )
+        .await
+        .map_err(|_| {
+            Error::UpstreamNotAvailable(format!(
+                "Connection to upstream agent at {} timed out after {:?}",
+                self.socket_path.display(),
+                DEFAULT_CONNECT_TIMEOUT
+            ))
+        })?
+        .map_err(|e| {
             Error::UpstreamNotAvailable(format!(
                 "Failed to connect to upstream agent at {}: {}",
                 self.socket_path.display(),

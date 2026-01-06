@@ -4,6 +4,7 @@
 //! connections and spawns proxy handlers for each connection.
 
 use crate::error::{Error, Result};
+use crate::utils::socket::{prepare_socket_path, set_socket_permissions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::{UnixListener, UnixStream};
@@ -40,30 +41,8 @@ impl Server {
     /// This creates the Unix socket file. If a file already exists at the path,
     /// it will be removed first (to handle stale sockets from crashed processes).
     pub async fn bind(&mut self) -> Result<()> {
-        // Remove existing socket if present
-        if self.socket_path.exists() {
-            debug!(path = %self.socket_path.display(), "Removing existing socket file");
-            std::fs::remove_file(&self.socket_path).map_err(|e| {
-                Error::Socket(format!(
-                    "Failed to remove existing socket at {}: {}",
-                    self.socket_path.display(),
-                    e
-                ))
-            })?;
-        }
-
-        // Ensure parent directory exists
-        if let Some(parent) = self.socket_path.parent()
-            && !parent.exists()
-        {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                Error::Socket(format!(
-                    "Failed to create parent directory {}: {}",
-                    parent.display(),
-                    e
-                ))
-            })?;
-        }
+        // Prepare socket path (remove existing, create parent dir)
+        prepare_socket_path(&self.socket_path).map_err(|e| Error::Socket(e.to_string()))?;
 
         // Create the listener
         let listener = UnixListener::bind(&self.socket_path).map_err(|e| {
@@ -73,6 +52,9 @@ impl Server {
                 e
             ))
         })?;
+
+        // Set socket permissions to 0600 (owner read/write only)
+        set_socket_permissions(&self.socket_path).map_err(|e| Error::Socket(e.to_string()))?;
 
         info!(path = %self.socket_path.display(), "Server listening");
         self.listener = Some(listener);
