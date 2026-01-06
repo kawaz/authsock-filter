@@ -65,13 +65,13 @@ pub fn config_search_paths() -> Vec<ConfigPath> {
     }
 
     #[cfg(target_os = "linux")]
-    if std::env::var("XDG_CONFIG_HOME").is_err() {
-        if let Some(home) = dirs::home_dir() {
-            paths.push(ConfigPath {
-                path: home.join(".config").join(APP_NAME).join(CONFIG_FILE_NAME),
-                description: "~/.config/authsock-filter/config.toml",
-            });
-        }
+    if std::env::var("XDG_CONFIG_HOME").is_err()
+        && let Some(home) = dirs::home_dir()
+    {
+        paths.push(ConfigPath {
+            path: home.join(".config").join(APP_NAME).join(CONFIG_FILE_NAME),
+            description: "~/.config/authsock-filter/config.toml",
+        });
     }
 
     // 3. ~/.config fallback (cross-platform, avoid duplicate)

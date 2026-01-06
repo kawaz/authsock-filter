@@ -550,16 +550,13 @@ pub async fn status(args: UnregisterArgs) -> Result<()> {
         println!("{}", plist.program_arguments.join(" "));
         println!();
 
-        // Get config path from arguments
-        let config_idx = plist.program_arguments.iter().position(|a| a == "--config");
-        if let Some(idx) = config_idx {
-            if let Some(cfg_path) = plist.program_arguments.get(idx + 1) {
-                // Load and display config as CLI format
-                if let Ok(config_file) = load_config(Path::new(cfg_path)) {
-                    println!("# Filter config ({}):", cfg_path);
-                    print_config_as_cli(&plist.program_arguments[0], &config_file.config);
-                }
-            }
+        // Get config path from arguments and display filter config
+        if let Some(idx) = plist.program_arguments.iter().position(|a| a == "--config")
+            && let Some(cfg_path) = plist.program_arguments.get(idx + 1)
+            && let Ok(config_file) = load_config(Path::new(cfg_path))
+        {
+            println!("# Filter config ({}):", cfg_path);
+            print_config_as_cli(&plist.program_arguments[0], &config_file.config);
         }
     }
 
