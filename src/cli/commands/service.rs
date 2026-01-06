@@ -61,6 +61,54 @@ fn is_shim_path(path: &Path) -> bool {
     shim_patterns.iter().any(|p| path_str.contains(p))
 }
 
+/// Get the actual executable path that a shim resolves to
+fn resolve_shim_executable(shim_path: &Path) -> Option<PathBuf> {
+    let name = shim_path.file_name()?.to_str()?;
+    let shim_str = shim_path.to_string_lossy();
+
+    // Try version manager's which command first (more reliable)
+    let which_result = if shim_str.contains("/mise/shims/") || shim_str.contains("/.mise/shims/") {
+        std::process::Command::new("mise")
+            .args(["which", name])
+            .output()
+            .ok()
+    } else if shim_str.contains("/asdf/shims/") || shim_str.contains("/.asdf/shims/") {
+        std::process::Command::new("asdf")
+            .args(["which", name])
+            .output()
+            .ok()
+    } else {
+        None
+    };
+
+    if let Some(output) = which_result {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout);
+            let path = PathBuf::from(path_str.trim());
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    // Fallback: try executing the shim with version command and parse Executable line
+    let output = std::process::Command::new(shim_path)
+        .arg("version")
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if let Some(path_str) = line.strip_prefix("  Executable: ") {
+                return Some(PathBuf::from(path_str.trim()));
+            }
+        }
+    }
+
+    None
+}
+
 /// Compute simple hash of file for comparison
 fn file_hash(path: &Path) -> Option<u64> {
     use std::collections::hash_map::DefaultHasher;
@@ -111,7 +159,8 @@ fn resolve_service_executable(
     explicit_path: Option<PathBuf>,
     allow_versioned: bool,
 ) -> Result<PathBuf> {
-    // 1. If explicitly specified, validate and use it
+    // 1. If explicitly specified, validate and use it as-is
+    // (Don't canonicalize - preserve shim paths that may be symlinks)
     if let Some(path) = explicit_path {
         if !path.exists() {
             bail!(
@@ -119,7 +168,15 @@ fn resolve_service_executable(
                 path.display()
             );
         }
-        return path.canonicalize().context("Failed to canonicalize path");
+        // Convert to absolute path if relative, but don't resolve symlinks
+        let abs_path = if path.is_absolute() {
+            path
+        } else {
+            std::env::current_dir()
+                .context("Failed to get current directory")?
+                .join(&path)
+        };
+        return Ok(abs_path);
     }
 
     // 2. Check if argv[0] is a stable path (e.g., shim)
@@ -139,17 +196,6 @@ fn resolve_service_executable(
 
     // 4. Check if it's a version-managed path
     if let Some(info) = detect_version_manager(&current_exe) {
-        // 4a. First, check if there's a shim path available - use it automatically
-        let shim_path = find_executable_candidates("authsock-filter")
-            .into_iter()
-            .find(|p| is_shim_path(p));
-        if let Some(shim) = shim_path {
-            // Shim found - use it automatically
-            info!(shim = %shim.display(), "Using shim path instead of versioned path");
-            return Ok(shim);
-        }
-
-        // 4b. No shim available, show candidates
         if allow_versioned {
             eprintln!(
                 "Warning: Registering with version-managed path.\nPath: {}\n",
@@ -175,29 +221,68 @@ fn resolve_service_executable(
             );
 
             for (i, path) in candidates.iter().enumerate() {
-                let mut positive_marks = Vec::new();
-                let mut negative_marks = Vec::new();
+                let mut positive_marks: Vec<String> = Vec::new();
+                let mut negative_marks: Vec<String> = Vec::new();
                 let is_current = path == &current_exe;
                 let version_info = detect_version_manager(path);
 
                 // Check if this is a known shim path
                 let is_shim = is_shim_path(path);
+                let mut shim_info: Option<(PathBuf, bool)> = None; // (resolved_path, is_same)
                 if is_shim {
-                    positive_marks.push("shim");
+                    // Check what binary the shim resolves to
+                    if let Some(resolved) = resolve_shim_executable(path) {
+                        let is_same = if resolved == current_exe {
+                            positive_marks.push("same-binary".to_string());
+                            true
+                        } else if resolved.canonicalize().ok() == current_canonical {
+                            positive_marks.push("same-target".to_string());
+                            true
+                        } else if file_hash(&resolved).as_ref() == current_hash.as_ref() {
+                            positive_marks.push("same-hash".to_string());
+                            true
+                        } else {
+                            negative_marks.push("different-binary".to_string());
+                            false
+                        };
+                        shim_info = Some((resolved, is_same));
+                    } else {
+                        positive_marks.push("shim".to_string());
+                    }
                 }
 
                 // Check if this is the current executable (positive)
+                let mut symlink_info: Option<(PathBuf, bool)> = None; // (target_path, is_same)
                 if is_current {
-                    positive_marks.push("current");
+                    positive_marks.push("current".to_string());
                 } else if !is_shim {
-                    // Check if same target (symlink resolves to same file)
+                    // Check if it's a symlink and show target
                     let path_canonical = path.canonicalize().ok();
-                    if path_canonical.is_some() && path_canonical == current_canonical {
-                        positive_marks.push("same-target");
-                    } else if let Some(ref ch) = current_hash {
-                        // Check if same content (hash)
-                        if file_hash(path).as_ref() == Some(ch) {
-                            positive_marks.push("same-hash");
+                    let is_symlink = path.is_symlink();
+
+                    if is_symlink {
+                        if let Some(ref canonical) = path_canonical {
+                            // Check if symlink points to same binary
+                            let is_same = if Some(canonical.clone()) == current_canonical {
+                                positive_marks.push("same-target".to_string());
+                                true
+                            } else if file_hash(canonical).as_ref() == current_hash.as_ref() {
+                                positive_marks.push("same-hash".to_string());
+                                true
+                            } else {
+                                negative_marks.push("different-binary".to_string());
+                                false
+                            };
+                            symlink_info = Some((canonical.clone(), is_same));
+                        }
+                    } else {
+                        // Regular file - check if same target or hash
+                        if path_canonical.is_some() && path_canonical == current_canonical {
+                            positive_marks.push("same-target".to_string());
+                        } else if let Some(ref ch) = current_hash {
+                            if file_hash(path).as_ref() == Some(ch) {
+                                positive_marks.push("same-hash".to_string());
+                            }
                         }
                     }
                 }
@@ -205,14 +290,28 @@ fn resolve_service_executable(
                 // Check if versioned or unstable path
                 if let Some(ref vi) = version_info {
                     if vi.name == "temporary" {
-                        negative_marks.push("unstable-path");
+                        negative_marks.push("unstable-path".to_string());
                     } else {
-                        negative_marks.push("versioned-path");
+                        negative_marks.push("versioned-path".to_string());
                     }
                 }
 
                 // Build colored marker string
                 let mut marker_parts = Vec::new();
+                // Add shim info (shim: in green, path in default color)
+                if let Some((ref resolved, _)) = shim_info {
+                    marker_parts.push(format!(
+                        "\x1b[32mshim:\x1b[0m{}",
+                        resolved.display()
+                    ));
+                }
+                // Add symlink info (symlink: in green, path in default color)
+                if let Some((ref target, _)) = symlink_info {
+                    marker_parts.push(format!(
+                        "\x1b[32msymlink:\x1b[0m{}",
+                        target.display()
+                    ));
+                }
                 if !positive_marks.is_empty() {
                     marker_parts.push(format!("\x1b[32m{}\x1b[0m", positive_marks.join(", ")));
                 }
@@ -236,7 +335,18 @@ fn resolve_service_executable(
                 }
             }
 
-            msg.push_str("\nUse --executable <PATH> or --force");
+            // Check if shim is available and suggest full command
+            let shim_path = candidates.iter().find(|p| is_shim_path(p));
+            if let Some(shim) = shim_path {
+                // Build suggested command: authsock-filter service register --executable <shim>
+                msg.push_str(&format!(
+                    "\n\x1b[32mRecommended:\x1b[0m\n  {} service register --executable {}\n",
+                    shim.display(),
+                    shim.display()
+                ));
+            } else {
+                msg.push_str("\nUse --executable <PATH> or --force");
+            }
 
             bail!("{}", msg);
         }

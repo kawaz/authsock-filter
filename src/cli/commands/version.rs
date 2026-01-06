@@ -16,6 +16,9 @@ pub async fn execute() -> Result<()> {
     println!("  Target:    {}", std::env::consts::ARCH);
     println!("  OS:        {}", std::env::consts::OS);
     println!("  Rust:      {}", env!("RUSTC_VERSION"));
+    if let Ok(exe) = std::env::current_exe() {
+        println!("  Executable: {}", exe.display());
+    }
     println!();
     println!("Repository: https://github.com/kawaz/authsock-filter");
     println!("License:    MIT");
