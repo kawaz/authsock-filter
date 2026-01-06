@@ -77,18 +77,25 @@ impl GitHubKeysMatcher {
         }
 
         // Update cache
+        let key_count = new_matchers.len();
         {
-            let mut matchers = self.matchers.write().unwrap();
+            let mut matchers = self
+                .matchers
+                .write()
+                .map_err(|e| crate::Error::Filter(format!("Failed to acquire lock: {}", e)))?;
             *matchers = new_matchers;
         }
         {
-            let mut cache_time = self.cache_time.write().unwrap();
+            let mut cache_time = self
+                .cache_time
+                .write()
+                .map_err(|e| crate::Error::Filter(format!("Failed to acquire lock: {}", e)))?;
             *cache_time = Some(Instant::now());
         }
 
         tracing::info!(
             "Fetched {} keys for GitHub user {}",
-            self.matchers.read().unwrap().len(),
+            key_count,
             self.username
         );
 
