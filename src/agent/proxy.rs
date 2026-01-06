@@ -3,6 +3,7 @@
 //! This module implements the core proxy functionality that filters
 //! SSH agent requests between a client and the upstream agent.
 
+use bytes::Bytes;
 use crate::error::Result;
 use crate::filter::FilterEvaluator;
 use crate::protocol::{AgentCodec, AgentMessage, Identity, MessageType};
@@ -10,6 +11,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::net::UnixStream;
+use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
 
 use super::Upstream;
@@ -24,6 +26,9 @@ pub struct Proxy {
     socket_path: String,
     /// Connection counter for client IDs
     connection_counter: AtomicU64,
+    /// Socket-level cache for allowed keys (shared across all connections)
+    /// Updated when REQUEST_IDENTITIES is processed
+    allowed_keys_cache: Arc<RwLock<HashSet<Bytes>>>,
 }
 
 impl Proxy {
@@ -38,6 +43,7 @@ impl Proxy {
             filter: Arc::new(filter),
             socket_path: String::new(),
             connection_counter: AtomicU64::new(0),
+            allowed_keys_cache: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -48,6 +54,7 @@ impl Proxy {
             filter,
             socket_path: String::new(),
             connection_counter: AtomicU64::new(0),
+            allowed_keys_cache: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -72,7 +79,7 @@ impl Proxy {
     /// This method processes messages from the client, applies filtering,
     /// and forwards requests to the upstream agent.
     pub async fn handle_client(&self, mut client_stream: UnixStream) -> Result<()> {
-        let client_id = self.connection_counter.fetch_add(1, Ordering::SeqCst);
+        let client_id = self.connection_counter.fetch_add(1, Ordering::Relaxed);
         debug!(
             socket = %self.socket_path,
             client_id = client_id,
@@ -93,10 +100,6 @@ impl Proxy {
     async fn handle_client_inner(&self, client_stream: &mut UnixStream) -> Result<()> {
         let (mut client_reader, mut client_writer) = client_stream.split();
 
-        // Per-connection cache for allowed keys
-        // This prevents race conditions between concurrent connections
-        let mut allowed_keys: HashSet<Vec<u8>> = HashSet::new();
-
         loop {
             // Read request from client
             let request = match AgentCodec::read(&mut client_reader).await? {
@@ -109,8 +112,8 @@ impl Proxy {
 
             trace!(msg_type = ?request.msg_type, "Received request from client");
 
-            // Process the request
-            let response = self.process_request(request, &mut allowed_keys).await?;
+            // Process the request (uses socket-level shared cache)
+            let response = self.process_request(request).await?;
 
             // Send response to client
             AgentCodec::write(&mut client_writer, &response).await?;
@@ -120,16 +123,10 @@ impl Proxy {
     }
 
     /// Process a single request from the client
-    async fn process_request(
-        &self,
-        request: AgentMessage,
-        allowed_keys: &mut HashSet<Vec<u8>>,
-    ) -> Result<AgentMessage> {
+    async fn process_request(&self, request: AgentMessage) -> Result<AgentMessage> {
         match request.msg_type {
-            MessageType::RequestIdentities => {
-                self.handle_request_identities(request, allowed_keys).await
-            }
-            MessageType::SignRequest => self.handle_sign_request(request, allowed_keys).await,
+            MessageType::RequestIdentities => self.handle_request_identities(request).await,
+            MessageType::SignRequest => self.handle_sign_request(request).await,
             _ => {
                 // Pass through other messages
                 self.forward_to_upstream(request).await
@@ -141,11 +138,7 @@ impl Proxy {
     ///
     /// Forwards the request to upstream, then filters the response
     /// to only include keys that match the filter rules.
-    async fn handle_request_identities(
-        &self,
-        request: AgentMessage,
-        allowed_keys: &mut HashSet<Vec<u8>>,
-    ) -> Result<AgentMessage> {
+    async fn handle_request_identities(&self, request: AgentMessage) -> Result<AgentMessage> {
         debug!("Handling REQUEST_IDENTITIES");
 
         // Forward to upstream
@@ -182,10 +175,13 @@ impl Proxy {
             "Filtered identities"
         );
 
-        // Update per-connection allowed keys cache
-        allowed_keys.clear();
-        for identity in &filtered {
-            allowed_keys.insert(identity.key_blob.to_vec());
+        // Update socket-level shared allowed keys cache
+        {
+            let mut cache = self.allowed_keys_cache.write().await;
+            cache.clear();
+            for identity in &filtered {
+                cache.insert(identity.key_blob.clone());
+            }
         }
 
         // Build filtered response
@@ -197,11 +193,7 @@ impl Proxy {
     /// Only allows signing with keys that are in the allowed set
     /// (i.e., keys that passed the filter in a previous REQUEST_IDENTITIES),
     /// or keys that match the filter directly.
-    async fn handle_sign_request(
-        &self,
-        request: AgentMessage,
-        allowed_keys: &HashSet<Vec<u8>>,
-    ) -> Result<AgentMessage> {
+    async fn handle_sign_request(&self, request: AgentMessage) -> Result<AgentMessage> {
         // Parse the key blob from the request
         let key_blob = match request.parse_sign_request_key() {
             Ok(blob) => blob,
@@ -215,18 +207,18 @@ impl Proxy {
         let identity = Identity::new(key_blob.clone(), String::new());
 
         // Check if this key is allowed:
-        // 1. First check the per-connection cache (from REQUEST_IDENTITIES)
+        // 1. First check the socket-level shared cache (from REQUEST_IDENTITIES)
         // 2. If not in cache, apply the filter directly
         //    (handles cases where SSH client uses separate connections)
-        let is_allowed = if allowed_keys.contains(key_blob.as_ref()) {
-            true
-        } else {
-            // Apply filter directly using key_blob (comment will be empty)
-            // This works for fingerprint, pubkey, keyfile, and github filters
-            // For comment-based filters, this may not match, but that's acceptable
-            // since the key should have been in the cache from REQUEST_IDENTITIES
-            self.filter.matches(&identity)
-        };
+        let is_allowed = {
+            let cache = self.allowed_keys_cache.read().await;
+            cache.contains(key_blob.as_ref())
+        } || self.filter.matches(&identity);
+        // Note: filter.matches() is called outside the lock to avoid holding
+        // the lock longer than necessary. This also handles cases where
+        // SSH client uses separate connections and the key wasn't cached.
+        // For comment-based filters, this may not match, but that's acceptable
+        // since the key should have been in the cache from REQUEST_IDENTITIES.
 
         if !is_allowed {
             debug!("Sign request denied: key not allowed by filter");
