@@ -1,7 +1,5 @@
-skip_output:
-  - meta           # lefthook version banner
-  - empty_summary  # summary when nothing to run
-  - success        # successful step output
+output:
+  - failure        # only show failures
 
 pre-push:
   commands:
