@@ -45,7 +45,11 @@ pub struct SocketConfig {
     /// Filter rules for this socket
     /// Mixed format: strings are single OR terms, arrays are AND groups
     /// e.g., ["f1", "f2", ["f3", "f4"]] means f1 || f2 || (f3 && f4)
-    #[serde(default, deserialize_with = "deserialize_filters")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_filters",
+        serialize_with = "serialize_filters"
+    )]
     pub filters: Vec<Vec<String>>,
 }
 
@@ -104,6 +108,28 @@ where
     }
 
     deserializer.deserialize_seq(FiltersVisitor)
+}
+
+/// Custom serializer for filters:
+/// - Single-element group → string (e.g., `["f1"]` → `"f1"`)
+/// - Multi-element group → array (e.g., `["f1", "f2"]` → `["f1", "f2"]`)
+fn serialize_filters<S>(filters: &Vec<Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeSeq;
+
+    let mut seq = serializer.serialize_seq(Some(filters.len()))?;
+    for group in filters {
+        if group.len() == 1 {
+            // Single filter → serialize as string
+            seq.serialize_element(&group[0])?;
+        } else {
+            // Multiple filters → serialize as array
+            seq.serialize_element(group)?;
+        }
+    }
+    seq.end()
 }
 
 /// GitHub API configuration
@@ -392,5 +418,49 @@ timeout = "10s"
 
         assert_eq!(config.github.cache_ttl, "1h");
         assert_eq!(config.github.timeout, "10s");
+    }
+
+    #[test]
+    fn test_filters_serialize_deserialize_roundtrip() {
+        // Test that filters maintain their format through serialization/deserialization
+        let toml_str = r#"
+path = "/tmp/test.sock"
+filters = ["f1", "f2", ["f3", "f4"]]
+"#;
+
+        // Deserialize
+        let config: SocketConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.filters,
+            vec![
+                vec!["f1".to_string()],
+                vec!["f2".to_string()],
+                vec!["f3".to_string(), "f4".to_string()],
+            ]
+        );
+
+        // Serialize back
+        let serialized = toml::to_string(&config).unwrap();
+
+        // Deserialize again
+        let config2: SocketConfig = toml::from_str(&serialized).unwrap();
+        assert_eq!(config.filters, config2.filters);
+
+        // Verify format is preserved (single-element groups as strings, multi-element as arrays)
+        assert!(serialized.contains("\"f1\"") || serialized.contains("'f1'"));
+        assert!(serialized.contains("\"f2\"") || serialized.contains("'f2'"));
+    }
+
+    #[test]
+    fn test_filters_empty_serialization() {
+        let config = SocketConfig {
+            path: "/tmp/test.sock".to_string(),
+            upstream: None,
+            filters: vec![],
+        };
+
+        let serialized = toml::to_string(&config).unwrap();
+        let config2: SocketConfig = toml::from_str(&serialized).unwrap();
+        assert_eq!(config.filters, config2.filters);
     }
 }

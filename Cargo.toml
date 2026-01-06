@@ -52,6 +52,9 @@ futures = "0.3"
 # HTTP client for GitHub API
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
+# Scope guard for cleanup on exit
+scopeguard = "1"
+
 # Path utilities
 dirs = "5"
 shellexpand = "3"
