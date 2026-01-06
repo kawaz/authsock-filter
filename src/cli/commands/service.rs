@@ -252,6 +252,10 @@ mod launchd {
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
+    /// Reverse domain prefix for launchd service labels
+    /// Based on repository: https://github.com/kawaz/authsock-filter
+    const LABEL_PREFIX: &str = "com.github.kawaz";
+
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(rename_all = "PascalCase")]
     pub struct LaunchdPlist {
@@ -268,11 +272,11 @@ mod launchd {
         dirs::home_dir()
             .expect("Failed to get home directory")
             .join("Library/LaunchAgents")
-            .join(format!("com.github.kawaz.{}.plist", name))
+            .join(format!("{}.{}.plist", LABEL_PREFIX, name))
     }
 
     pub fn label(name: &str) -> String {
-        format!("com.github.kawaz.{}", name)
+        format!("{}.{}", LABEL_PREFIX, name)
     }
 
     pub fn generate_plist(name: &str, exe_path: &str, config_path: &str) -> Result<Vec<u8>> {
