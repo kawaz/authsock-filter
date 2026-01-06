@@ -2,31 +2,26 @@
 
 ## Current Design (v0.1.x)
 
-```bash
-authsock-filter run \
-  --upstream "$SSH_AUTH_SOCK" \
-  --socket /tmp/work.sock comment=*@work* \
-  --socket /tmp/github.sock github=kawaz
-```
-
-- Single global `--upstream`
-- Multiple `--socket` with inline filters
-
-## Future Design (v0.2.x)
-
-### Multiple Upstream Groups
+### Multiple Upstream Groups (Implemented)
 
 Each `--upstream` starts a new group. Subsequent `--socket` definitions belong to that group.
 
 ```bash
 authsock-filter run \
   --upstream "$SSH_AUTH_SOCK" \
-    --socket /tmp/mac-personal.sock comment="*personal*" \
-    --socket /tmp/mac-work.sock comment="*work*" \
-  --upstream "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" \
-    --socket /tmp/op-personal.sock comment="*personal*" \
-    --socket /tmp/op-work.sock comment="*work*"
+    --socket /tmp/mac-personal.sock 'comment=*personal*' \
+    --socket /tmp/mac-work.sock 'comment=*work*' \
+  --upstream "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" \
+    --socket /tmp/op-personal.sock 'comment=*personal*' \
+    --socket /tmp/op-work.sock 'comment=*work*'
 ```
+
+### CLI/Config Conversion (Implemented)
+
+- `--print-config`: Export CLI options as TOML config
+- `config command`: Generate CLI command from config file
+
+## Future Design
 
 ### Feature Flags (Future)
 

@@ -7,7 +7,7 @@ SSH agent proxy with filtering and logging. Create multiple filtered sockets fro
 - **Multiple filtered sockets**: Create separate agent sockets with different key visibility
 - **Flexible filtering**: Filter keys by fingerprint, comment, key type, GitHub user keys, or keyfile
 - **Pattern matching**: Support for exact match, glob patterns, and regular expressions
-- **Negation support**: Exclude keys with `-` prefix
+- **Negation support**: Exclude keys with `not-` prefix
 - **JSONL logging**: Log all agent operations for auditing
 - **Daemon mode**: Run as a background service
 - **OS integration**: Register as launchd (macOS) or systemd (Linux) service
@@ -28,7 +28,7 @@ Download the latest binary from [Releases](https://github.com/kawaz/authsock-fil
 
 ```bash
 # Create a filtered socket that only shows keys with "@work" in the comment
-authsock-filter run --upstream "$SSH_AUTH_SOCK" --socket /tmp/work.sock comment=*@work*
+authsock-filter run --upstream "$SSH_AUTH_SOCK" --socket /tmp/work.sock 'comment=*@work*'
 
 # Use the filtered socket
 SSH_AUTH_SOCK=/tmp/work.sock ssh user@work-server
@@ -40,16 +40,11 @@ SSH_AUTH_SOCK=/tmp/work.sock ssh user@work-server
 authsock-filter [OPTIONS] <COMMAND>
 
 Commands:
-  run         Run the proxy in foreground
-  start       Start the proxy as a daemon
-  stop        Stop the running daemon
-  status      Show daemon status
-  config      Show configuration
+  run         Run the proxy in the foreground
+  config      Manage configuration file (show, edit, path, command)
+  service     Manage OS service (register, unregister, reload, status)
   version     Show version information
-  upgrade     Upgrade to the latest version
-  register    Register as OS service (launchd/systemd)
-  unregister  Unregister OS service
-  completion  Generate shell completion scripts
+  completion  Generate shell completions
 
 Options:
   --config <PATH>  Configuration file path
@@ -65,8 +60,8 @@ authsock-filter run [OPTIONS]
 
 Options:
   --upstream <SOCKET>        Upstream agent socket [default: $SSH_AUTH_SOCK]
-  --log <PATH>               JSONL log output path
   --socket <PATH> [ARGS...]  Socket definition with inline filters
+  --print-config             Output equivalent configuration and exit
 ```
 
 ### Upstream Groups
@@ -77,16 +72,16 @@ Each `--upstream` starts a new group. Subsequent `--socket` definitions belong t
 # Single upstream (default uses $SSH_AUTH_SOCK)
 authsock-filter run \
   --upstream "$SSH_AUTH_SOCK" \
-  --socket /tmp/work.sock comment=*@work* type=ed25519 \
-  --socket /tmp/github.sock github=kawaz
+  --socket /tmp/work.sock 'comment=*@work*' 'type=ed25519' \
+  --socket /tmp/github.sock 'github=kawaz'
 
 # Multiple upstreams (e.g., macOS Keychain + 1Password)
 authsock-filter run \
   --upstream "$SSH_AUTH_SOCK" \
-    --socket /tmp/mac-work.sock comment=*@work* \
-    --socket /tmp/mac-personal.sock not-comment=*@work* \
-  --upstream ~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock \
-    --socket /tmp/1p-github.sock github=kawaz
+    --socket /tmp/mac-work.sock 'comment=*@work*' \
+    --socket /tmp/mac-personal.sock 'not-comment=*@work*' \
+  --upstream "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" \
+    --socket /tmp/1p-github.sock 'github=kawaz'
 ```
 
 ### Socket and Filter Format
@@ -105,7 +100,7 @@ Filters use `type=value` format. Multiple filters on the same socket are ANDed t
 | Key type | `type=ed25519` | Match by type: `ed25519`, `rsa`, `ecdsa`, `dsa` |
 | Public key | `pubkey=ssh-ed25519 AAAA...` | Match by full public key |
 | Keyfile | `keyfile=~/.ssh/allowed_keys` | Match keys from file |
-| Negation | `not-type=value` | Prefix with `!` to exclude |
+| Negation | `not-type=value` | Prefix with `not-` to exclude |
 
 ## Configuration File
 
@@ -114,23 +109,23 @@ Create `~/.config/authsock-filter/config.toml`:
 ```toml
 # Global settings
 upstream = "$SSH_AUTH_SOCK"
-log_path = "$XDG_STATE_HOME/authsock-filter/messages.jsonl"
 
 # Socket definitions
 [sockets.work]
 path = "$XDG_RUNTIME_DIR/authsock-filter/work.sock"
-filters = ["comment:~@work\\.example\\.com$"]
+filters = ["comment=~@work\\.example\\.com$"]
 
 [sockets.personal]
 path = "~/.ssh/personal-agent.sock"
+# Multiple filters in inner array = AND, multiple arrays = OR
+# e.g., [["f1", "f2"], "f3"] means (f1 AND f2) OR f3
 filters = [
-    "github:kawaz",
-    "type:ed25519",
+    ["github=kawaz", "type=ed25519"],
 ]
 
 [sockets.no-dsa]
 path = "$XDG_RUNTIME_DIR/authsock-filter/no-dsa.sock"
-filters = ["-type:dsa"]
+filters = ["not-type=dsa"]
 
 # GitHub cache settings (optional)
 [github]
@@ -145,8 +140,8 @@ timeout = "10s"
 ```bash
 # Create separate sockets for work and personal use
 authsock-filter run \
-  --socket ~/.ssh/work.sock comment=*@work.example.com \
-  --socket ~/.ssh/personal.sock not-comment=*@work.example.com
+  --socket ~/.ssh/work.sock 'comment=*@work.example.com' \
+  --socket ~/.ssh/personal.sock 'not-comment=*@work.example.com'
 ```
 
 ### Only Modern Keys
@@ -154,21 +149,21 @@ authsock-filter run \
 ```bash
 # Only allow ed25519 keys
 authsock-filter run \
-  --socket /tmp/modern.sock type=ed25519 not-type=dsa not-type=rsa
+  --socket /tmp/modern.sock 'type=ed25519'
 ```
 
 ### GitHub Authorized Keys
 
 ```bash
 # Only allow keys registered with your GitHub account
-authsock-filter run --socket /tmp/github.sock github=kawaz
+authsock-filter run --socket /tmp/github.sock 'github=kawaz'
 ```
 
 ### Combining Filters
 
 ```bash
 # Work keys that are also ed25519
-authsock-filter run --socket /tmp/work-ed25519.sock comment=*@work* type=ed25519
+authsock-filter run --socket /tmp/work-ed25519.sock 'comment=*@work*' 'type=ed25519'
 ```
 
 ## Environment Variables
@@ -184,26 +179,31 @@ authsock-filter run --socket /tmp/work-ed25519.sock comment=*@work* type=ed25519
 
 ```bash
 # Register as launchd service
-authsock-filter register
+authsock-filter service register
+
+# Check status
+authsock-filter service status
 
 # Unregister
-authsock-filter unregister
+authsock-filter service unregister
 ```
 
 ### Linux (systemd)
 
 ```bash
 # Register as systemd user service
-authsock-filter register
+authsock-filter service register
+
+# Check status
+authsock-filter service status
 
 # Unregister
-authsock-filter unregister
+authsock-filter service unregister
 ```
 
 ## Signal Handling
 
 - `SIGTERM`, `SIGINT`: Graceful shutdown (cleanup sockets)
-- `SIGHUP`: Reload configuration and refresh GitHub/keyfile caches
 
 ## Shell Completion
 
@@ -220,23 +220,19 @@ source <(authsock-filter completion zsh)
 authsock-filter completion fish | source
 ```
 
-## TODO
+## Roadmap
 
-- [x] Dynamic shell completion using `CompleteEnv` (clap_complete unstable-dynamic)
-  - Binary-as-completion-engine for minimal shell memory footprint
-- [x] Custom completion for `--socket` inline filters
-  - Filter type completion (comment=, fingerprint=, github=, type=, etc.)
-  - Negation filter completion (not-type=, not-comment=, etc.)
-  - Key type value completion for type= and not-type=
-  - Path completion for socket paths
-- [x] Multiple upstream support
-  - Each `--upstream` starts a new group
-  - Enables using multiple SSH agents (e.g., macOS Keychain + 1Password)
-- [ ] Feature flags per upstream (`--allow-add`, `--allow-remove`, etc.)
-- [ ] Socket-specific options (`--mode`, etc.)
-- [ ] CLI/Config bidirectional conversion (`--dump-config`, `config --as-cli`)
-- [ ] Unify config file filter format with CLI (`type=value` style)
-- [ ] Register to mise registry for `mise use authsock-filter` support
+### Implemented
+- Dynamic shell completion using `CompleteEnv` (clap_complete unstable-dynamic)
+- Custom completion for `--socket` inline filters
+- Multiple upstream support (each `--upstream` starts a new group)
+- CLI/Config conversion (`--print-config`, `config command`)
+
+### Planned
+- Feature flags per upstream (`--allow-add`, `--allow-remove`, etc.)
+- Socket-specific options (`--mode`, etc.)
+- SIGHUP for configuration reload
+- Register to mise registry
 
 ## License
 
