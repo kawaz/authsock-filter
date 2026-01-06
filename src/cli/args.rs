@@ -70,9 +70,9 @@ pub struct ConfigArgs {
     #[arg(long)]
     pub validate: bool,
 
-    /// Show default configuration
+    /// Show example configuration
     #[arg(long)]
-    pub show_default: bool,
+    pub example: bool,
 
     /// Output format
     #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]

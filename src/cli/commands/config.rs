@@ -36,63 +36,66 @@ fn find_config_file() -> Option<PathBuf> {
         .find(|path| path.exists())
 }
 
-/// Default configuration content
-fn default_config() -> &'static str {
+/// Example configuration content
+fn example_config() -> &'static str {
     r#"# authsock-filter configuration file
 #
 # See https://github.com/kawaz/authsock-filter for documentation
 
-# Upstream SSH agent socket
+# Default upstream SSH agent socket (used when socket doesn't specify one)
 # Default: $SSH_AUTH_SOCK
 # upstream = "/run/user/1000/ssh-agent.sock"
 
-# Log file path (JSONL format)
-# log = "/var/log/authsock-filter/access.log"
-
 # Socket definitions
-# Each socket specifies a path and optional filters
+# Each socket can specify its own upstream and filters
 [[sockets]]
-# Socket file path
 path = "/tmp/authsock-filter/default.sock"
-# Filters to apply (optional)
-# filters = ["fingerprint:SHA256:xxx", "github:username"]
+# upstream = "/path/to/agent.sock"  # Optional: override default upstream
+# filters = ["github=username", "type=ed25519"]
 
 # Example: Allow only GitHub keys for a specific user
 # [[sockets]]
 # path = "/tmp/authsock-filter/github.sock"
-# filters = ["github:kawaz"]
+# filters = ["github=kawaz"]
 
-# Example: Allow only specific key by fingerprint
-# [[sockets]]
-# path = "/tmp/authsock-filter/specific.sock"
-# filters = ["fingerprint:SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]
-
-# Example: Allow keys matching a comment pattern
+# Example: Allow only ED25519 keys with comment pattern
 # [[sockets]]
 # path = "/tmp/authsock-filter/work.sock"
-# filters = ["comment:*@work.example.com"]
+# filters = ["comment=*@work.example.com", "type=ed25519"]
 
-# Example: Allow only specific key types
+# Example: Exclude DSA keys
 # [[sockets]]
-# path = "/tmp/authsock-filter/ed25519-only.sock"
-# filters = ["keytype:ssh-ed25519"]
+# path = "/tmp/authsock-filter/no-dsa.sock"
+# filters = ["-type=dsa"]
+
+# Filter syntax:
+#   type=value      Include keys matching the filter
+#   -type=value     Exclude keys matching the filter
+#
+# Filter types:
+#   fingerprint=SHA256:xxx   Match by key fingerprint
+#   comment=*pattern*        Match by comment (glob pattern)
+#   github=username          Match keys from github.com/username.keys
+#   type=ed25519|rsa|...     Match by key type
+#   pubkey=<base64>          Match by full public key
+#   keyfile=/path/to/file    Match keys from file
 "#
 }
 
 /// Execute the config command
 pub async fn execute(args: ConfigArgs) -> Result<()> {
-    if args.show_default {
-        // Show default configuration
+    if args.example {
+        // Show example configuration
         match args.format.as_str() {
             "json" => {
                 // Convert TOML to JSON
                 let config: toml::Value =
-                    toml::from_str(default_config()).context("Failed to parse default config")?;
+                    toml::from_str(example_config()).context("Failed to parse example config")?;
                 let json = serde_json::to_string_pretty(&config)?;
                 println!("{}", json);
             }
             _ => {
-                print!("{}", default_config());
+                print!("{}", example_config());
             }
         }
         return Ok(());
@@ -150,9 +153,9 @@ pub async fn execute(args: ConfigArgs) -> Result<()> {
             println!("#   - {}", path.display());
         }
         println!();
-        println!("# Using default configuration:");
+        println!("# Example configuration (use --example for clean output):");
         println!();
-        print!("{}", default_config());
+        print!("{}", example_config());
     }
 
     Ok(())
