@@ -211,18 +211,22 @@ fn resolve_service_executable(
                 }
             }
 
-            // Check if shim is available and suggest full command
+            // Get argv[0] for command suggestions
+            let argv0 = std::env::args().next().unwrap_or_else(|| "authsock-filter".to_string());
+
+            // Check if shim is available and suggest commands
             let shim_path = candidates.iter().find(|p| is_shim_path(p));
             if let Some(shim) = shim_path {
-                // Build suggested command: authsock-filter service register --executable <shim>
                 msg.push_str(&format!(
                     "\n\x1b[32mRecommended:\x1b[0m\n  {} service register --executable {}\n",
-                    shim.display(),
+                    argv0,
                     shim.display()
                 ));
-            } else {
-                msg.push_str("\nUse --executable <PATH> or --force");
             }
+            msg.push_str(&format!(
+                "\n\x1b[33mOr force with current path:\x1b[0m\n  {} service register --force\n",
+                argv0
+            ));
 
             bail!("{}", msg);
         }
