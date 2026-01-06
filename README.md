@@ -2,6 +2,16 @@
 
 SSH agent proxy with filtering and logging. Create multiple filtered sockets from a single upstream SSH agent.
 
+## Motivation
+
+SSH agents present **all registered keys** to any server you connect to. This means:
+
+- Remote servers can see fingerprints of keys you don't intend to use
+- Unintended key exposure may leak information about your identity or organization
+- You have no control over which keys are offered during authentication
+
+**authsock-filter** solves this by creating filtered proxy sockets that only expose the keys you explicitly allow. Connect to work servers with only work keys, personal servers with only personal keys.
+
 ## Features
 
 - **Multiple filtered sockets**: Create separate agent sockets with different key visibility
@@ -33,6 +43,20 @@ authsock-filter run --upstream "$SSH_AUTH_SOCK" --socket /tmp/work.sock 'comment
 # Use the filtered socket
 SSH_AUTH_SOCK=/tmp/work.sock ssh user@work-server
 ```
+
+## Verification
+
+Compare the keys before and after filtering:
+
+```bash
+# List all keys in your original agent
+ssh-add -l
+
+# List keys visible through the filtered socket
+SSH_AUTH_SOCK=/tmp/work.sock ssh-add -l
+```
+
+The filtered socket should only show keys matching your filter criteria.
 
 ## Usage
 
@@ -231,7 +255,6 @@ authsock-filter completion fish | source
 ### Planned
 - Feature flags per upstream (`--allow-add`, `--allow-remove`, etc.)
 - Socket-specific options (`--mode`, etc.)
-- SIGHUP for configuration reload
 - Register to mise registry
 
 ## License
