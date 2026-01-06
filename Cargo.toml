@@ -1,6 +1,6 @@
 [package]
 name = "authsock-filter"
-version = "0.1.15"
+version = "0.1.16"
 edition = "2024"
 description = "SSH agent proxy with filtering and logging"
 license = "MIT"

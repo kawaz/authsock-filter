@@ -15,7 +15,7 @@ pub async fn execute() -> Result<()> {
     println!("Build info:");
     println!("  Target:    {}", std::env::consts::ARCH);
     println!("  OS:        {}", std::env::consts::OS);
-    println!("  Rust:      {}", env!("CARGO_PKG_RUST_VERSION", "unknown"));
+    println!("  Rust:      {}", env!("RUSTC_VERSION"));
     println!();
     println!("Repository: https://github.com/kawaz/authsock-filter");
     println!("License:    MIT");
