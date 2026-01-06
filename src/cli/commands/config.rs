@@ -180,27 +180,29 @@ pub fn print_config_as_cli(exe: &str, config: &crate::config::Config) {
         );
 
         for (j, (_name, socket)) in sockets.iter().enumerate() {
-            let is_last_socket = is_last_group && j == sockets.len() - 1;
-
             // Quote socket path
             let quoted_path = shlex::try_quote(&socket.path).unwrap_or(socket.path.clone().into());
 
-            // Quote each filter (flatten all groups - AND within group, OR between groups)
-            // For CLI output, we concatenate all filters from all groups
-            let quoted_filters: Vec<String> = socket
-                .filters
-                .iter()
-                .flatten()
-                .map(|f| shlex::try_quote(f).unwrap_or(f.clone().into()).to_string())
-                .collect();
-
-            let filters_str = quoted_filters.join(" ");
-            let line_end = if is_last_socket { "" } else { " \\" };
-
-            if filters_str.is_empty() {
+            // Each AND group becomes a separate --socket line (OR between groups)
+            if socket.filters.is_empty() {
+                let is_last = is_last_group && j == sockets.len() - 1;
+                let line_end = if is_last { "" } else { " \\" };
                 println!("    --socket {}{}", quoted_path, line_end);
             } else {
-                println!("    --socket {} {}{}", quoted_path, filters_str, line_end);
+                let filter_group_count = socket.filters.len();
+                for (k, and_group) in socket.filters.iter().enumerate() {
+                    let is_last =
+                        is_last_group && j == sockets.len() - 1 && k == filter_group_count - 1;
+                    let line_end = if is_last { "" } else { " \\" };
+
+                    let quoted_filters: Vec<String> = and_group
+                        .iter()
+                        .map(|f| shlex::try_quote(f).unwrap_or(f.clone().into()).to_string())
+                        .collect();
+                    let filters_str = quoted_filters.join(" ");
+
+                    println!("    --socket {} {}{}", quoted_path, filters_str, line_end);
+                }
             }
         }
     }

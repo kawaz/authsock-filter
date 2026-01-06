@@ -197,9 +197,9 @@ fn load_configuration(args: &RunArgs, config_path: Option<PathBuf>) -> Result<Ex
         use std::collections::HashMap;
 
         let default_upstream = cli_groups[0].path.clone();
-        let mut sockets = HashMap::new();
+        let mut sockets: HashMap<String, ExpandedSocketConfig> = HashMap::new();
 
-        for (idx, group) in cli_groups.iter().enumerate() {
+        for group in cli_groups.iter() {
             // If this group has a different upstream than the default, set it per-socket
             let socket_upstream = if group.path != default_upstream {
                 Some(group.path.clone())
@@ -207,21 +207,59 @@ fn load_configuration(args: &RunArgs, config_path: Option<PathBuf>) -> Result<Ex
                 None
             };
 
-            for (sock_idx, spec) in group.sockets.iter().enumerate() {
-                let name = format!("socket_{}_{}", idx, sock_idx);
-                sockets.insert(
-                    name,
-                    ExpandedSocketConfig {
-                        path: spec.path.clone(),
-                        upstream: socket_upstream.clone(),
-                        // CLI args are a single AND group
-                        filters: if spec.filters.is_empty() {
-                            vec![]
-                        } else {
-                            vec![spec.filters.clone()]
+            for spec in group.sockets.iter() {
+                // Find existing socket with same path (for OR conditions)
+                let existing_name = sockets
+                    .iter()
+                    .find(|(_, cfg)| cfg.path == spec.path)
+                    .map(|(name, _)| name.clone());
+
+                if let Some(name) = existing_name {
+                    // Same path: add filters as OR group
+                    if !spec.filters.is_empty() {
+                        sockets
+                            .get_mut(&name)
+                            .unwrap()
+                            .filters
+                            .push(spec.filters.clone());
+                    }
+                } else {
+                    // New socket path
+                    let name = spec
+                        .path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("socket")
+                        .to_string();
+
+                    // Handle duplicate names (different paths with same filename)
+                    let final_name = if sockets.contains_key(&name) {
+                        let mut i = 2;
+                        loop {
+                            let candidate = format!("{}-{}", name, i);
+                            if !sockets.contains_key(&candidate) {
+                                break candidate;
+                            }
+                            i += 1;
+                        }
+                    } else {
+                        name
+                    };
+
+                    sockets.insert(
+                        final_name,
+                        ExpandedSocketConfig {
+                            path: spec.path.clone(),
+                            upstream: socket_upstream.clone(),
+                            // CLI args are a single AND group
+                            filters: if spec.filters.is_empty() {
+                                vec![]
+                            } else {
+                                vec![spec.filters.clone()]
+                            },
                         },
-                    },
-                );
+                    );
+                }
             }
         }
 
@@ -260,7 +298,7 @@ fn print_config_from_args(args: &RunArgs) -> Result<()> {
 
     // Build Config structure
     let default_upstream = cli_groups[0].path.to_string_lossy().to_string();
-    let mut sockets = HashMap::new();
+    let mut sockets: HashMap<String, SocketConfig> = HashMap::new();
 
     for group in &cli_groups {
         let group_upstream = group.path.to_string_lossy().to_string();
@@ -272,41 +310,60 @@ fn print_config_from_args(args: &RunArgs) -> Result<()> {
         };
 
         for spec in &group.sockets {
-            // Generate a name from socket path
-            let name = spec
-                .path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("socket")
-                .to_string();
+            let socket_path = spec.path.to_string_lossy().to_string();
 
-            // Handle duplicate names
-            let final_name = if sockets.contains_key(&name) {
-                let mut i = 2;
-                loop {
-                    let candidate = format!("{}-{}", name, i);
-                    if !sockets.contains_key(&candidate) {
-                        break candidate;
-                    }
-                    i += 1;
+            // Find existing socket with same path (for OR conditions)
+            let existing_name = sockets
+                .iter()
+                .find(|(_, cfg)| cfg.path == socket_path)
+                .map(|(name, _)| name.clone());
+
+            if let Some(name) = existing_name {
+                // Same path: add filters as OR group
+                if !spec.filters.is_empty() {
+                    sockets
+                        .get_mut(&name)
+                        .unwrap()
+                        .filters
+                        .push(spec.filters.clone());
                 }
             } else {
-                name
-            };
+                // New socket path
+                let name = spec
+                    .path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("socket")
+                    .to_string();
 
-            sockets.insert(
-                final_name,
-                SocketConfig {
-                    path: spec.path.to_string_lossy().to_string(),
-                    upstream: socket_upstream.clone(),
-                    // CLI args are a single AND group
-                    filters: if spec.filters.is_empty() {
-                        vec![]
-                    } else {
-                        vec![spec.filters.clone()]
+                // Handle duplicate names (different paths with same filename)
+                let final_name = if sockets.contains_key(&name) {
+                    let mut i = 2;
+                    loop {
+                        let candidate = format!("{}-{}", name, i);
+                        if !sockets.contains_key(&candidate) {
+                            break candidate;
+                        }
+                        i += 1;
+                    }
+                } else {
+                    name
+                };
+
+                sockets.insert(
+                    final_name,
+                    SocketConfig {
+                        path: socket_path,
+                        upstream: socket_upstream.clone(),
+                        // CLI args are a single AND group
+                        filters: if spec.filters.is_empty() {
+                            vec![]
+                        } else {
+                            vec![spec.filters.clone()]
+                        },
                     },
-                },
-            );
+                );
+            }
         }
     }
 
