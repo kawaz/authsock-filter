@@ -84,7 +84,7 @@ authsock-filter run \
 authsock-filter run \
   --upstream "$SSH_AUTH_SOCK" \
     --socket /tmp/mac-work.sock comment=*@work* \
-    --socket /tmp/mac-personal.sock -comment=*@work* \
+    --socket /tmp/mac-personal.sock not-comment=*@work* \
   --upstream ~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock \
     --socket /tmp/1p-github.sock github=kawaz
 ```
@@ -105,7 +105,7 @@ Filters use `type=value` format. Multiple filters on the same socket are ANDed t
 | Key type | `type=ed25519` | Match by type: `ed25519`, `rsa`, `ecdsa`, `dsa` |
 | Public key | `pubkey=ssh-ed25519 AAAA...` | Match by full public key |
 | Keyfile | `keyfile=~/.ssh/allowed_keys` | Match keys from file |
-| Negation | `-type=value` | Prefix with `-` to exclude |
+| Negation | `not-type=value` | Prefix with `!` to exclude |
 
 ## Configuration File
 
@@ -146,7 +146,7 @@ timeout = "10s"
 # Create separate sockets for work and personal use
 authsock-filter run \
   --socket ~/.ssh/work.sock comment=*@work.example.com \
-  --socket ~/.ssh/personal.sock -comment=*@work.example.com
+  --socket ~/.ssh/personal.sock not-comment=*@work.example.com
 ```
 
 ### Only Modern Keys
@@ -154,7 +154,7 @@ authsock-filter run \
 ```bash
 # Only allow ed25519 keys
 authsock-filter run \
-  --socket /tmp/modern.sock type=ed25519 -type=dsa -type=rsa
+  --socket /tmp/modern.sock type=ed25519 not-type=dsa not-type=rsa
 ```
 
 ### GitHub Authorized Keys
@@ -226,8 +226,8 @@ authsock-filter completion fish | source
   - Binary-as-completion-engine for minimal shell memory footprint
 - [x] Custom completion for `--socket` inline filters
   - Filter type completion (comment=, fingerprint=, github=, type=, etc.)
-  - Negation filter completion (-type=, -comment=, etc.)
-  - Key type value completion for type= and -type=
+  - Negation filter completion (not-type=, not-comment=, etc.)
+  - Key type value completion for type= and not-type=
   - Path completion for socket paths
 - [x] Multiple upstream support
   - Each `--upstream` starts a new group

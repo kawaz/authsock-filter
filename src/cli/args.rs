@@ -36,12 +36,12 @@ pub struct RunArgs {
     /// Format: --socket PATH [FILTERS...]
     ///
     /// Arguments after PATH until the next --socket are associated with this socket:
-    ///   - Filters: type=value (e.g., comment=*@work*, github=kawaz, -type=dsa)
+    ///   - Filters: type=value (e.g., comment=*@work*, github=kawaz, not-type=dsa)
     ///
     /// Examples:
     ///   --socket /tmp/work.sock comment=*@work* type=ed25519
     ///   --socket /tmp/github.sock github=kawaz
-    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", allow_hyphen_values = true, add = ArgValueCompleter::new(socket_completer))]
+    #[arg(long, num_args = 1.., value_name = "PATH [ARGS...]", add = ArgValueCompleter::new(socket_completer))]
     pub socket: Vec<String>,
 
     /// Print configuration as TOML and exit (useful for creating config file)
@@ -254,12 +254,12 @@ const FILTER_TYPES: &[(&str, &str)] = &[
     ("type=", "Match by key type (ed25519, rsa, ecdsa, dsa)"),
     ("pubkey=", "Match by full public key"),
     ("keyfile=", "Match keys from file"),
-    ("-fingerprint=", "Exclude by fingerprint"),
-    ("-comment=", "Exclude by comment"),
-    ("-github=", "Exclude GitHub user keys"),
-    ("-type=", "Exclude key type"),
-    ("-pubkey=", "Exclude by public key"),
-    ("-keyfile=", "Exclude keys from file"),
+    ("not-fingerprint=", "Exclude by fingerprint"),
+    ("not-comment=", "Exclude by comment"),
+    ("not-github=", "Exclude GitHub user keys"),
+    ("not-type=", "Exclude key type"),
+    ("not-pubkey=", "Exclude by public key"),
+    ("not-keyfile=", "Exclude keys from file"),
 ];
 
 /// Key types for type= filter completion
@@ -282,17 +282,17 @@ fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
                 })
                 .collect();
         }
-        if let Some(prefix) = current.strip_prefix("-type=") {
+        if let Some(prefix) = current.strip_prefix("not-type=") {
             return KEY_TYPES
                 .iter()
                 .filter(|t| t.starts_with(prefix))
                 .map(|t| {
-                    CompletionCandidate::new(format!("-type={}", t))
+                    CompletionCandidate::new(format!("not-type={}", t))
                         .help(Some(format!("Exclude {} keys", t).into()))
                 })
                 .collect();
         }
-        // keyfile= and -keyfile= need path completion
+        // keyfile= and not-keyfile= need path completion
         if let Some(path_prefix) = current.strip_prefix("keyfile=") {
             return complete_path(path_prefix)
                 .into_iter()
@@ -301,12 +301,12 @@ fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
                 })
                 .collect();
         }
-        if let Some(path_prefix) = current.strip_prefix("-keyfile=") {
+        if let Some(path_prefix) = current.strip_prefix("not-keyfile=") {
             return complete_path(path_prefix)
                 .into_iter()
                 .map(|c| {
                     CompletionCandidate::new(format!(
-                        "-keyfile={}",
+                        "not-keyfile={}",
                         c.get_value().to_string_lossy()
                     ))
                 })
@@ -316,12 +316,12 @@ fn socket_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
         return vec![];
     }
 
-    // Check if it starts with - (negation filter prefix)
-    if current.starts_with('-') && !current.starts_with("--") {
+    // Check if it starts with not- (negation filter prefix)
+    if current.starts_with("not-") {
         // Complete negation filters
         return FILTER_TYPES
             .iter()
-            .filter(|(name, _)| name.starts_with('-') && name.starts_with(current.as_ref()))
+            .filter(|(name, _)| name.starts_with("not-") && name.starts_with(current.as_ref()))
             .map(|(name, help)| CompletionCandidate::new(*name).help(Some((*help).into())))
             .collect();
     }

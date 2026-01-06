@@ -66,11 +66,11 @@ path = "/tmp/authsock-filter/default.sock"
 # Example: Exclude DSA keys
 # [[sockets]]
 # path = "/tmp/authsock-filter/no-dsa.sock"
-# filters = ["-type=dsa"]
+# filters = ["not-type=dsa"]
 
 # Filter syntax:
 #   type=value      Include keys matching the filter
-#   -type=value     Exclude keys matching the filter
+#   not-type=value   Exclude keys matching the filter
 #
 # Filter types:
 #   fingerprint=SHA256:xxx   Match by key fingerprint

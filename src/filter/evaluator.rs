@@ -112,7 +112,7 @@ mod tests {
     fn test_multiple_rules_and() {
         let evaluator = FilterEvaluator::parse(&[
             "comment=*@work*".to_string(),
-            "-comment=*@work.bad*".to_string(),
+            "not-comment=*@work.bad*".to_string(),
         ])
         .unwrap();
 

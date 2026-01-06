@@ -73,7 +73,7 @@ impl FilterRule {
 
     /// Parse a filter rule from a string
     pub fn parse(s: &str) -> Result<Self> {
-        let (negated, s) = if let Some(rest) = s.strip_prefix('-') {
+        let (negated, s) = if let Some(rest) = s.strip_prefix("not-") {
             (true, rest)
         } else {
             (false, s)
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_parse_negated() {
-        let rule = FilterRule::parse("-type=dsa").unwrap();
+        let rule = FilterRule::parse("not-type=dsa").unwrap();
         assert!(rule.negated);
         assert!(matches!(rule.filter, Filter::KeyType(_)));
     }

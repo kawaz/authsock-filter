@@ -33,7 +33,7 @@ fn test_filter_by_key_type_ed25519() {
 fn test_filter_exclude_key_type() {
     let ed25519_key = make_identity_from_str(ED25519_KEY_1);
 
-    let evaluator = FilterEvaluator::parse(&["-type=ed25519".to_string()]).unwrap();
+    let evaluator = FilterEvaluator::parse(&["not-type=ed25519".to_string()]).unwrap();
 
     assert!(
         !evaluator.matches(&ed25519_key),
@@ -74,7 +74,7 @@ fn test_filter_exclude_comment() {
     let work_key = make_identity_from_str(ED25519_KEY_1);
     let personal_key = make_identity_from_str(ED25519_KEY_2);
 
-    let evaluator = FilterEvaluator::parse(&["-comment=*@work*".to_string()]).unwrap();
+    let evaluator = FilterEvaluator::parse(&["not-comment=*@work*".to_string()]).unwrap();
 
     assert!(!evaluator.matches(&work_key), "work key should be excluded");
     assert!(
@@ -262,8 +262,8 @@ fn test_filter_multiple_negations() {
     let personal_key = make_identity_from_str(ED25519_KEY_2);
 
     let evaluator = FilterEvaluator::parse(&[
-        "-comment=*@work*".to_string(),
-        "-comment=*@personal*".to_string(),
+        "not-comment=*@work*".to_string(),
+        "not-comment=*@personal*".to_string(),
     ])
     .unwrap();
 
