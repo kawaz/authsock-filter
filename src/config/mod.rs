@@ -86,9 +86,9 @@ where
                         let group: Vec<String> = arr
                             .into_iter()
                             .map(|v| {
-                                v.as_str()
-                                    .map(|s| s.to_string())
-                                    .ok_or_else(|| de::Error::custom("expected string in filter group"))
+                                v.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                                    de::Error::custom("expected string in filter group")
+                                })
                             })
                             .collect::<Result<_, _>>()?;
                         result.push(group);
