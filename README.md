@@ -4,13 +4,15 @@ SSH agent proxy with filtering and logging. Create multiple filtered sockets fro
 
 ## Motivation
 
-SSH agents present **all registered keys** to any server you connect to. This means:
+SSH agents present **all registered keys** to any server you connect to. This causes:
 
-- Remote servers can see fingerprints of keys you don't intend to use
-- Unintended key exposure may leak information about your identity or organization
-- You have no control over which keys are offered during authentication
+- **Too many authentication failures**: Hitting `MaxAuthTries` before the right key
+- **Unintended identity exposure**: Fingerprints leak to servers you don't intend
+- **Wrong account access**: GitHub authenticates as user A when you wanted user B
 
-**authsock-filter** solves this by creating filtered proxy sockets that only expose the keys you explicitly allow. Connect to work servers with only work keys, personal servers with only personal keys.
+`IdentitiesOnly` + `IdentityFile` can help, but `IdentityFile` is additive and default keys still act as fallback.
+
+**authsock-filter** filters at the agent level—no fallback, no leakage.
 
 ## Features
 
