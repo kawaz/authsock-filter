@@ -38,16 +38,9 @@ anyhow = "1"
 
 # Serialization for logging
 serde_json = "1"
-chrono = { version = "0.4", features = ["serde"] }
 
 # Byte manipulation
 bytes = "1"
-
-# Base64 encoding
-base64 = "0.22"
-
-# Async utilities
-futures = "0.3"
 
 # HTTP client for GitHub API
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
