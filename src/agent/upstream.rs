@@ -13,6 +13,9 @@ use tracing::{debug, trace};
 /// Default connection timeout for upstream agent
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Default request timeout for upstream agent (send + receive)
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Connection to an upstream SSH agent
 pub struct Upstream {
     /// Path to the upstream agent socket
@@ -89,6 +92,18 @@ pub struct UpstreamConnection {
 impl UpstreamConnection {
     /// Send a message to the upstream agent and receive the response
     pub async fn send_receive(&mut self, msg: &AgentMessage) -> Result<AgentMessage> {
+        tokio::time::timeout(DEFAULT_REQUEST_TIMEOUT, self.send_receive_inner(msg))
+            .await
+            .map_err(|_| {
+                Error::UpstreamNotAvailable(format!(
+                    "Request to upstream agent timed out after {:?}",
+                    DEFAULT_REQUEST_TIMEOUT
+                ))
+            })?
+    }
+
+    /// Internal implementation of send_receive without timeout
+    async fn send_receive_inner(&mut self, msg: &AgentMessage) -> Result<AgentMessage> {
         trace!(msg_type = ?msg.msg_type, "Sending message to upstream");
 
         let (mut reader, mut writer) = self.stream.split();
