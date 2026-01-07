@@ -64,6 +64,12 @@ pub enum Commands {
     Completion(CompletionArgs),
 
     /// Print version information (hidden alias for -V/--version)
+    ///
+    /// Design rationale: Both `--version` and `version` subcommand are supported
+    /// intentionally for user convenience. Users often try either form when checking
+    /// version, and rejecting one would be unnecessarily frustrating. The subcommand
+    /// is hidden from help to keep `-V/--version` as the canonical form while still
+    /// accepting `version` as an undocumented alias.
     #[command(hide = true)]
     Version,
 }
