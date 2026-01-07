@@ -48,3 +48,62 @@ impl AgentCodec {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[tokio::test]
+    async fn test_read_zero_length_message() {
+        // Zero-length message should error
+        let mut data = Cursor::new(vec![0u8, 0, 0, 0]);
+        let result = AgentCodec::read(&mut data).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Zero-length"));
+    }
+
+    #[tokio::test]
+    async fn test_read_message_too_large() {
+        // Message size exceeding MAX_MESSAGE_SIZE (16MB)
+        let mut data = Cursor::new(vec![0x01, 0x00, 0x00, 0x01]); // 16MB + 1
+        let result = AgentCodec::read(&mut data).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too large"));
+    }
+
+    #[tokio::test]
+    async fn test_read_eof() {
+        // Empty input should return None
+        let mut data = Cursor::new(vec![]);
+        let result = AgentCodec::read(&mut data).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_read_truncated_length() {
+        // Partial length prefix (only 2 bytes) - returns error due to UnexpectedEof
+        let mut data = Cursor::new(vec![0u8, 0]);
+        let result = AgentCodec::read(&mut data).await;
+        // This returns Ok(None) because read_exact fails with UnexpectedEof
+        // which is handled specially to return None (connection closed)
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_read_truncated_body() {
+        // Length says 10 bytes but only 5 available
+        let mut data = Cursor::new(vec![0u8, 0, 0, 10, 1, 2, 3, 4, 5]);
+        let result = AgentCodec::read(&mut data).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_read_valid_request_identities() {
+        // Valid SSH_AGENTC_REQUEST_IDENTITIES (message type 11)
+        let mut data = Cursor::new(vec![0u8, 0, 0, 1, 11]);
+        let result = AgentCodec::read(&mut data).await.unwrap();
+        assert!(result.is_some());
+    }
+}

@@ -81,6 +81,7 @@ impl Upstream {
 }
 
 /// An active connection to the upstream agent
+#[derive(Debug)]
 pub struct UpstreamConnection {
     stream: UnixStream,
 }
@@ -131,6 +132,27 @@ mod tests {
         // SAFETY: This test runs in isolation
         unsafe { std::env::remove_var("SSH_AUTH_SOCK") };
         let result = Upstream::from_env();
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_connect_nonexistent_socket() {
+        // Attempt to connect to a socket that doesn't exist
+        let upstream = Upstream::new("/tmp/nonexistent-socket-12345.sock");
+        let result = upstream.connect().await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Failed to connect") || err.contains("upstream"));
+    }
+
+    #[tokio::test]
+    async fn test_connect_not_a_socket() {
+        // Attempt to connect to a regular file (not a socket)
+        let temp_file = std::env::temp_dir().join("not-a-socket-test.txt");
+        std::fs::write(&temp_file, "test").unwrap();
+        let upstream = Upstream::new(&temp_file);
+        let result = upstream.connect().await;
+        std::fs::remove_file(&temp_file).ok();
         assert!(result.is_err());
     }
 }

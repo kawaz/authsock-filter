@@ -599,7 +599,7 @@ pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> R
 
     info!(name = %args.name, executable = %exe_path_str, config = %config_path_str, "Registering systemd service");
 
-    let unit_path = systemd::unit_path(&args.name);
+    let unit_path = systemd::unit_path(&args.name)?;
 
     // Create systemd user directory if needed
     if let Some(parent) = unit_path.parent() {
@@ -651,7 +651,7 @@ pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> R
 pub async fn unregister(args: UnregisterArgs) -> Result<()> {
     info!(name = %args.name, "Unregistering systemd service");
 
-    let unit_path = systemd::unit_path(&args.name);
+    let unit_path = systemd::unit_path(&args.name)?;
 
     if !unit_path.exists() {
         println!("Service is not registered");
@@ -682,7 +682,7 @@ pub async fn unregister(args: UnregisterArgs) -> Result<()> {
 pub async fn reload(args: UnregisterArgs) -> Result<()> {
     info!(name = %args.name, "Reloading systemd service");
 
-    let unit_path = systemd::unit_path(&args.name);
+    let unit_path = systemd::unit_path(&args.name)?;
 
     if !unit_path.exists() {
         bail!("Service is not registered. Use 'service register' first.");
@@ -703,7 +703,7 @@ pub async fn reload(args: UnregisterArgs) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 pub async fn status(args: UnregisterArgs) -> Result<()> {
-    let unit_path = systemd::unit_path(&args.name);
+    let unit_path = systemd::unit_path(&args.name)?;
 
     // Check if registered
     if !unit_path.exists() {
