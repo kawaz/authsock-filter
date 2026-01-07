@@ -121,7 +121,7 @@ filters = ["comment=*personal*"]
 
 ## CLI / Config Conversion
 
-### CLI to Config (`--dump-config`)
+### CLI to Config (`--print-config`)
 
 Export current CLI options as a config file:
 
@@ -130,7 +130,7 @@ authsock-filter run \
   --upstream "$SSH_AUTH_SOCK" \
   --socket /tmp/work.sock 'comment=*@work*' \
   --socket /tmp/github.sock 'github=kawaz' \
-  --dump-config
+  --print-config
 
 # Output:
 # [[upstream]]
@@ -145,12 +145,12 @@ authsock-filter run \
 # filters = ["github=kawaz"]
 ```
 
-### Config to CLI (`config --as-cli`)
+### Config to CLI (`config command`)
 
 Generate CLI command from config file:
 
 ```bash
-authsock-filter config --as-cli
+authsock-filter config command
 
 # Output:
 # authsock-filter run \
