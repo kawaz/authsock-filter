@@ -1,0 +1,81 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release info
+        id: release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download and calculate checksums
+        id: checksums
+        run: |
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+
+          DARWIN_ARM64_SHA=$(curl -sL "$BASE_URL/authsock-filter-aarch64-apple-darwin.tar.gz" | sha256sum | cut -d' ' -f1)
+          DARWIN_AMD64_SHA=$(curl -sL "$BASE_URL/authsock-filter-x86_64-apple-darwin.tar.gz" | sha256sum | cut -d' ' -f1)
+          LINUX_AMD64_SHA=$(curl -sL "$BASE_URL/authsock-filter-x86_64-unknown-linux-gnu.tar.gz" | sha256sum | cut -d' ' -f1)
+
+          echo "darwin_arm64=$DARWIN_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "darwin_amd64=$DARWIN_AMD64_SHA" >> $GITHUB_OUTPUT
+          echo "linux_amd64=$LINUX_AMD64_SHA" >> $GITHUB_OUTPUT
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: kawaz/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          cat > homebrew-tap/Formula/authsock-filter.rb << 'EOF'
+          class AuthsockFilter < Formula
+            desc "SSH agent proxy with filtering and logging"
+            homepage "https://github.com/kawaz/authsock-filter"
+            version "${{ steps.release.outputs.version }}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/kawaz/authsock-filter/releases/download/v#{version}/authsock-filter-aarch64-apple-darwin.tar.gz"
+                sha256 "${{ steps.checksums.outputs.darwin_arm64 }}"
+              end
+              on_intel do
+                url "https://github.com/kawaz/authsock-filter/releases/download/v#{version}/authsock-filter-x86_64-apple-darwin.tar.gz"
+                sha256 "${{ steps.checksums.outputs.darwin_amd64 }}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/kawaz/authsock-filter/releases/download/v#{version}/authsock-filter-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_amd64 }}"
+              end
+            end
+
+            def install
+              bin.install "authsock-filter"
+            end
+
+            test do
+              assert_match "authsock-filter #{version}", shell_output("#{bin}/authsock-filter --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/authsock-filter.rb
+          git commit -m "Update authsock-filter to ${{ steps.release.outputs.version }}"
+          git push
