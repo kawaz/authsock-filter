@@ -3,10 +3,10 @@
 //! This module implements the core proxy functionality that filters
 //! SSH agent requests between a client and the upstream agent.
 
-use bytes::Bytes;
 use crate::error::Result;
 use crate::filter::FilterEvaluator;
 use crate::protocol::{AgentCodec, AgentMessage, Identity, MessageType};
+use bytes::Bytes;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};

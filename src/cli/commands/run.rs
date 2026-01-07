@@ -107,16 +107,20 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         );
 
         // Prepare socket path (remove existing with symlink protection, create parent dir)
-        prepare_socket_path(&spec.path)
-            .context(format!("Failed to prepare socket at {}", spec.path.display()))?;
+        prepare_socket_path(&spec.path).context(format!(
+            "Failed to prepare socket at {}",
+            spec.path.display()
+        ))?;
 
         // Bind listener
         let listener = UnixListener::bind(&spec.path)
             .context(format!("Failed to bind to socket {}", spec.path.display()))?;
 
         // Set socket permissions to 0600 (owner read/write only)
-        set_socket_permissions(&spec.path)
-            .context(format!("Failed to set permissions on socket at {}", spec.path.display()))?;
+        set_socket_permissions(&spec.path).context(format!(
+            "Failed to set permissions on socket at {}",
+            spec.path.display()
+        ))?;
 
         // Record inode for monitoring
         let inode = std::fs::metadata(&spec.path).ok().map(|m| m.ino());

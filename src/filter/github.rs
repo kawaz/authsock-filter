@@ -3,8 +3,8 @@
 use crate::error::Result;
 use crate::filter::PubkeyMatcher;
 use crate::protocol::Identity;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 

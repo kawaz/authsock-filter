@@ -85,8 +85,7 @@ fn classify_error(err: &anyhow::Error) -> ExitCode {
         ExitCode::ConfigError
     } else if err_str.contains("upstream") || err_str.contains("ssh_auth_sock") {
         ExitCode::UpstreamError
-    } else if err_str.contains("socket") || err_str.contains("bind") || err_str.contains("listen")
-    {
+    } else if err_str.contains("socket") || err_str.contains("bind") || err_str.contains("listen") {
         ExitCode::SocketError
     } else {
         ExitCode::GeneralError
