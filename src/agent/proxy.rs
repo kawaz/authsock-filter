@@ -221,7 +221,7 @@ impl Proxy {
         // since the key should have been in the cache from REQUEST_IDENTITIES.
 
         if !is_allowed {
-            debug!("Sign request denied: key not allowed by filter");
+            warn!("Sign request denied: key not allowed by filter");
             return Ok(AgentMessage::failure());
         }
 
