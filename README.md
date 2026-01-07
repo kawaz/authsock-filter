@@ -28,15 +28,18 @@ See [Discussions](https://github.com/kawaz/authsock-filter/discussions/categorie
 
 ## Installation
 
-### From source
-
 ```bash
-cargo install --git https://github.com/kawaz/authsock-filter
+# Homebrew
+brew install kawaz/tap/authsock-filter
+
+# mise
+mise use authsock-filter
+
+# Cargo
+cargo install authsock-filter
 ```
 
-### From releases
-
-Download the latest binary from [Releases](https://github.com/kawaz/authsock-filter/releases).
+See [docs/installation.md](docs/installation.md) for more options (aqua, Nix, manual download).
 
 ## Prerequisites
 
