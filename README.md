@@ -61,20 +61,20 @@ The filtered socket should only show keys matching your filter criteria.
 ## Usage
 
 ```bash
-authsock-filter [OPTIONS] <COMMAND>
+authsock-filter [OPTIONS] [COMMAND]
 
 Commands:
   run         Run the proxy in the foreground
   config      Manage configuration file (show, edit, path, command)
   service     Manage OS service (register, unregister, reload, status)
-  version     Show version information
   completion  Generate shell completions
 
 Options:
-  --config <PATH>  Configuration file path
-  --verbose        Increase verbosity
-  --quiet          Decrease verbosity
-  --help           Print help
+      --config <PATH>  Configuration file path [env: AUTHSOCK_FILTER_CONFIG]
+  -v, --verbose        Enable verbose output
+      --quiet          Suppress non-essential output
+  -V, --version        Print version
+  -h, --help           Print help
 ```
 
 ### Run Command Options

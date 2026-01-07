@@ -63,7 +63,8 @@ pub enum Commands {
     /// Generate shell completions
     Completion(CompletionArgs),
 
-    /// Print version information (same as -V/--version)
+    /// Print version information (hidden alias for -V/--version)
+    #[command(hide = true)]
     Version,
 }
 

@@ -128,8 +128,8 @@ Export current CLI options as a config file:
 ```bash
 authsock-filter run \
   --upstream "$SSH_AUTH_SOCK" \
-  --socket /tmp/work.sock comment=*@work* \
-  --socket /tmp/github.sock github=kawaz \
+  --socket /tmp/work.sock 'comment=*@work*' \
+  --socket /tmp/github.sock 'github=kawaz' \
   --dump-config
 
 # Output:
