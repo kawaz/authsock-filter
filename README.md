@@ -230,10 +230,8 @@ authsock-filter run --socket /tmp/work-ed25519.sock 'comment=*@work*' 'type=ed25
 
 ## OS Service Registration
 
-### macOS (launchd)
-
 ```bash
-# Register as launchd service
+# Register as launchd (macOS) or systemd (Linux) service
 authsock-filter service register
 
 # Check status
@@ -243,18 +241,8 @@ authsock-filter service status
 authsock-filter service unregister
 ```
 
-### Linux (systemd)
-
-```bash
-# Register as systemd user service
-authsock-filter service register
-
-# Check status
-authsock-filter service status
-
-# Unregister
-authsock-filter service unregister
-```
+> **Note:** If you installed via mise/aqua, the binary path changes on upgrade.
+> See [docs/service.md](docs/service.md) for solutions and detailed configuration.
 
 ## Signal Handling
 
