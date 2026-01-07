@@ -329,3 +329,138 @@ async fn test_proxy_excludes_by_key_type() {
         "should have 0 keys (all excluded)"
     );
 }
+
+/// Start a mock SSH agent that immediately closes connections
+async fn start_disconnecting_agent(socket_path: &std::path::Path) {
+    let listener = UnixListener::bind(socket_path).unwrap();
+
+    tokio::spawn(async move {
+        loop {
+            let (stream, _) = match listener.accept().await {
+                Ok(conn) => conn,
+                Err(_) => break,
+            };
+            // Immediately drop the connection
+            drop(stream);
+        }
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+}
+
+/// Start a mock SSH agent that returns malformed IdentitiesAnswer
+async fn start_malformed_agent(socket_path: &std::path::Path) {
+    let listener = UnixListener::bind(socket_path).unwrap();
+
+    tokio::spawn(async move {
+        loop {
+            let (mut stream, _) = match listener.accept().await {
+                Ok(conn) => conn,
+                Err(_) => break,
+            };
+
+            tokio::spawn(async move {
+                let (mut reader, mut writer) = stream.split();
+                loop {
+                    let msg = match AgentCodec::read(&mut reader).await {
+                        Ok(Some(msg)) => msg,
+                        _ => break,
+                    };
+
+                    let response = match msg.msg_type {
+                        MessageType::RequestIdentities => {
+                            // Return malformed IdentitiesAnswer with count=5 but no actual identities
+                            let mut payload = bytes::BytesMut::new();
+                            payload.extend_from_slice(&5u32.to_be_bytes()); // count = 5
+                            // But no actual identity data follows
+                            AgentMessage::new(MessageType::IdentitiesAnswer, payload.freeze())
+                        }
+                        _ => AgentMessage::failure(),
+                    };
+
+                    if AgentCodec::write(&mut writer, &response).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+}
+
+#[tokio::test]
+async fn test_proxy_handles_upstream_disconnect() {
+    let temp_dir = TempDir::new().unwrap();
+    let upstream_path = temp_dir.path().join("upstream.sock");
+    let proxy_path = temp_dir.path().join("proxy.sock");
+
+    // Start mock upstream agent that disconnects immediately
+    start_disconnecting_agent(&upstream_path).await;
+
+    // Create filter (allow all)
+    let filter = FilterEvaluator::parse(&[]).unwrap();
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
+    let proxy = Arc::new(Proxy::new(upstream, filter));
+
+    // Start proxy server
+    start_proxy_server(&proxy_path, proxy).await;
+
+    // Request identities through proxy - should handle disconnect gracefully
+    let mut stream = UnixStream::connect(&proxy_path).await.unwrap();
+    let (mut reader, mut writer) = stream.split();
+
+    let request = AgentMessage::new(MessageType::RequestIdentities, Bytes::new());
+    AgentCodec::write(&mut writer, &request).await.unwrap();
+
+    // When upstream disconnects, proxy should either:
+    // 1. Return FAILURE message, OR
+    // 2. Close the connection gracefully (return None)
+    // Both are acceptable behaviors - the important thing is no panic/crash
+    let response = AgentCodec::read(&mut reader).await.unwrap();
+    match response {
+        Some(msg) => {
+            assert_eq!(
+                msg.msg_type,
+                MessageType::Failure,
+                "should return FAILURE when upstream disconnects"
+            );
+        }
+        None => {
+            // Connection closed gracefully - also acceptable
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_proxy_handles_malformed_identities_answer() {
+    let temp_dir = TempDir::new().unwrap();
+    let upstream_path = temp_dir.path().join("upstream.sock");
+    let proxy_path = temp_dir.path().join("proxy.sock");
+
+    // Start mock upstream agent that returns malformed response
+    start_malformed_agent(&upstream_path).await;
+
+    // Create filter (allow all)
+    let filter = FilterEvaluator::parse(&[]).unwrap();
+    let upstream = Upstream::new(upstream_path.to_str().unwrap());
+    let proxy = Arc::new(Proxy::new(upstream, filter));
+
+    // Start proxy server
+    start_proxy_server(&proxy_path, proxy).await;
+
+    // Request identities through proxy
+    let mut stream = UnixStream::connect(&proxy_path).await.unwrap();
+    let (mut reader, mut writer) = stream.split();
+
+    let request = AgentMessage::new(MessageType::RequestIdentities, Bytes::new());
+    AgentCodec::write(&mut writer, &request).await.unwrap();
+
+    // Proxy should return FAILURE when receiving malformed response
+    let response = AgentCodec::read(&mut reader).await.unwrap().unwrap();
+    assert_eq!(
+        response.msg_type,
+        MessageType::Failure,
+        "should return FAILURE when upstream returns malformed response"
+    );
+}

@@ -386,4 +386,78 @@ mod tests {
         assert_eq!(msg.msg_type, MessageType::Success);
         assert!(msg.payload.is_empty());
     }
+
+    #[test]
+    fn test_parse_sign_request_empty_payload() {
+        let msg = AgentMessage::new(MessageType::SignRequest, Bytes::new());
+        let result = msg.parse_sign_request_key();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too short"));
+    }
+
+    #[test]
+    fn test_parse_sign_request_zero_length_key() {
+        let mut payload = BytesMut::new();
+        payload.put_u32(0); // key_len = 0
+        let msg = AgentMessage::new(MessageType::SignRequest, payload.freeze());
+        let result = msg.parse_sign_request_key();
+        // Zero-length key should succeed but return empty bytes
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_parse_sign_request_truncated_key() {
+        let mut payload = BytesMut::new();
+        payload.put_u32(100); // key_len = 100
+        payload.put_slice(&[0u8; 50]); // But only 50 bytes of data
+        let msg = AgentMessage::new(MessageType::SignRequest, payload.freeze());
+        let result = msg.parse_sign_request_key();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("truncated"));
+    }
+
+    #[test]
+    fn test_parse_sign_request_oversized_key() {
+        let mut payload = BytesMut::new();
+        payload.put_u32(MAX_BLOB_SIZE + 1); // Exceeds max
+        let msg = AgentMessage::new(MessageType::SignRequest, payload.freeze());
+        let result = msg.parse_sign_request_key();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exceeds maximum"));
+    }
+
+    #[test]
+    fn test_parse_sign_request_wrong_message_type() {
+        let msg = AgentMessage::new(MessageType::RequestIdentities, Bytes::new());
+        let result = msg.parse_sign_request_key();
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Expected SignRequest")
+        );
+    }
+
+    #[test]
+    fn test_parse_identities_max_count() {
+        // Test with MAX_IDENTITIES count but no actual data (should fail during parsing)
+        let mut payload = BytesMut::new();
+        payload.put_u32(MAX_IDENTITIES); // count at max
+        let msg = AgentMessage::new(MessageType::IdentitiesAnswer, payload.freeze());
+        let result = msg.parse_identities();
+        // Should fail because there's no actual identity data
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_identities_exceeds_max_count() {
+        let mut payload = BytesMut::new();
+        payload.put_u32(MAX_IDENTITIES + 1); // Exceeds max
+        let msg = AgentMessage::new(MessageType::IdentitiesAnswer, payload.freeze());
+        let result = msg.parse_identities();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("exceeds maximum"));
+    }
 }
