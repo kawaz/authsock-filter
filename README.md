@@ -14,6 +14,8 @@ SSH agents present **all registered keys** to any server you connect to. This ca
 
 **authsock-filter** filters at the agent level—no fallback, no leakage.
 
+See [Discussions](https://github.com/kawaz/authsock-filter/discussions/categories/q-a) for use cases and solutions.
+
 ## Features
 
 - **Multiple filtered sockets**: Create separate agent sockets with different key visibility
