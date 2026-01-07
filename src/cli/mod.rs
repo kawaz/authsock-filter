@@ -62,6 +62,9 @@ pub enum Commands {
 
     /// Generate shell completions
     Completion(CompletionArgs),
+
+    /// Print version information (same as -V/--version)
+    Version,
 }
 
 /// Config management commands

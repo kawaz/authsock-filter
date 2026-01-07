@@ -72,6 +72,9 @@ async fn run(cli: Cli) -> Result<(), (ExitCode, anyhow::Error)> {
         Commands::Completion(args) => authsock_filter::cli::commands::completion::execute(args)
             .await
             .map_err(|e| (ExitCode::GeneralError, e))?,
+        Commands::Version => {
+            authsock_filter::cli::commands::version::print_version(cli.verbose);
+        }
     }
 
     Ok(())
