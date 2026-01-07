@@ -38,6 +38,20 @@ cargo install --git https://github.com/kawaz/authsock-filter
 
 Download the latest binary from [Releases](https://github.com/kawaz/authsock-filter/releases).
 
+## Prerequisites
+
+This tool requires an SSH agent running on your system. Most systems have one enabled by default.
+
+- `$SSH_AUTH_SOCK` points to your SSH agent's Unix socket
+- Run `ssh-add -l` to verify your agent is running and has keys loaded
+
+### Terminology
+
+| Term | Description |
+|------|-------------|
+| **Upstream agent** | Your original SSH agent (pointed to by `$SSH_AUTH_SOCK`) |
+| **Filtered socket** | A new socket that only exposes selected keys from the upstream agent |
+
 ## Quick Start
 
 ```bash
@@ -74,11 +88,11 @@ Commands:
   completion  Generate shell completions
 
 Options:
-      --config <PATH>  Configuration file path [env: AUTHSOCK_FILTER_CONFIG]
-  -v, --verbose        Enable verbose output
-      --quiet          Suppress non-essential output
-  -V, --version        Print version
-  -h, --help           Print help
+      --help             Print help
+  -V, --version          Print version (use -v/--verbose with --version for detailed info)
+      --config <CONFIG>  Configuration file path [env: AUTHSOCK_FILTER_CONFIG=]
+  -v, --verbose          Enable verbose output
+      --quiet            Suppress non-essential output
 ```
 
 ### Run Command Options
@@ -200,6 +214,16 @@ authsock-filter run --socket /tmp/work-ed25519.sock 'comment=*@work*' 'type=ed25
 - `XDG_CONFIG_HOME`: Config file location (default: `~/.config`)
 - `XDG_RUNTIME_DIR`: Runtime directory for sockets and PID file
 - `XDG_STATE_HOME`: State directory for logs (default: `~/.local/state`)
+
+## Exit Codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| 0 | Success | Normal exit |
+| 1 | GeneralError | Unspecified error |
+| 2 | ConfigError | Invalid configuration or missing required settings |
+| 3 | SocketError | Cannot create/bind socket or permission denied |
+| 4 | UpstreamError | Cannot connect to upstream agent |
 
 ## OS Service Registration
 
