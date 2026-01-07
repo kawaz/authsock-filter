@@ -1,100 +1,100 @@
-# authsock-filter プロジェクト固有のレビュー観点
+# authsock-filter Project Review Context
 
-このファイルは `/thorough-review` 実行時に各レビュワーが参照するプロジェクト固有の観点です。
+This file provides project-specific review perspectives for `/thorough-review`.
 
-## プロジェクト概要
+## Project Overview
 
-SSH Agent のプロキシとして動作し、フィルタリング機能を提供するCLIツール（Rust製）。
+A CLI tool (Rust) that acts as an SSH Agent proxy with filtering capabilities.
 
-## セキュリティレビュー固有観点
+## Security Review Focus
 
-### SSH Agent プロトコル
-- `src/protocol/` でのパース処理
-- バッファオーバーフロー、整数オーバーフロー、不正なメッセージ処理
-- 上流SSH Agentからのレスポンス検証（信頼境界）
+### SSH Agent Protocol
+- Parsing in `src/protocol/`
+- Buffer overflow, integer overflow, malformed message handling
+- Response validation from upstream SSH Agent (trust boundary)
 
-### Unixソケット
-- `src/agent/server.rs` でのソケット作成
-- パーミッション設定（他ユーザーからのアクセス防止）
-- シンボリックリンク攻撃
+### Unix Sockets
+- Socket creation in `src/agent/server.rs`
+- Permission settings (prevent access from other users)
+- Symlink attacks
 
-### パス・環境変数
-- `shellexpand` 使用箇所でのインジェクション
-- パストラバーサル
+### Paths & Environment Variables
+- Injection via `shellexpand` usage
+- Path traversal
 - `src/utils/path.rs`
 
-### 設定ファイル
-- `src/config/mod.rs`, `file.rs` でのTOMLパース
+### Configuration Files
+- TOML parsing in `src/config/mod.rs`, `file.rs`
 
-## アーキテクチャレビュー固有観点
+## Architecture Review Focus
 
-### 主要モジュール
-- `src/agent/` - プロキシ実装（server, proxy, upstream）
-- `src/filter/` - フィルター評価
-- `src/protocol/` - SSH Agentプロトコル
-- `src/cli/` - CLI処理
-- `src/config/` - 設定管理
+### Main Modules
+- `src/agent/` - Proxy implementation (server, proxy, upstream)
+- `src/filter/` - Filter evaluation
+- `src/protocol/` - SSH Agent protocol
+- `src/cli/` - CLI handling
+- `src/config/` - Configuration management
 
-### CLI/Config整合性
-- CLI引数 → Config → CLI の往復変換で情報が失われないか
+### CLI/Config Consistency
+- Round-trip conversion: CLI args → Config → CLI must preserve information
 - `src/cli/args.rs`, `src/config/mod.rs`
-- フィルター形式: `Vec<Vec<String>>`（外側=OR、内側=AND）
-- 同一パスの `--socket` マージロジック
+- Filter format: `Vec<Vec<String>>` (outer=OR, inner=AND)
+- Merge logic for `--socket` with same path
 
-## エラーハンドリング固有観点
+## Error Handling Focus
 
-### inode監視
-- `src/cli/commands/run.rs` での監視処理の堅牢性
+### Inode Monitoring
+- Robustness of monitoring in `src/cli/commands/run.rs`
 
-### 接続管理
-- 上流SSH Agentへの接続タイムアウト
+### Connection Management
+- Timeout for upstream SSH Agent connections
 - `src/agent/upstream.rs`
 
-## UXレビュー固有観点
+## UX Review Focus
 
-### 初心者向け
-- SSH Agentの仕組みを知らないユーザー向けの説明
-- フィルターの「AND/OR」概念
-- 「upstream」用語の説明
+### For Beginners
+- Explanation for users unfamiliar with SSH Agent
+- Filter "AND/OR" concept
+- "upstream" terminology
 
-### エキスパート向け
-- launchd/systemd統合手順
-- 設定ファイルの移植性
+### For Experts
+- launchd/systemd integration instructions
+- Configuration file portability
 
-## テストカバレッジ固有観点
+## Test Coverage Focus
 
-### 重点テスト対象
-- プロトコルパース（不正なメッセージ）
-- フィルター評価ロジック
-- inode監視機能
-- 上流Agent切断時の動作
+### Priority Test Targets
+- Protocol parsing (malformed messages)
+- Filter evaluation logic
+- Inode monitoring
+- Behavior on upstream Agent disconnection
 
-## 主要ファイル一覧
+## Key Files
 
 ```
 src/
-├── lib.rs              # モジュール構成
-├── error.rs            # エラー型
+├── lib.rs              # Module structure
+├── error.rs            # Error types
 ├── agent/
-│   ├── server.rs       # ソケットサーバー
-│   ├── proxy.rs        # プロキシ処理
-│   └── upstream.rs     # 上流Agent接続
+│   ├── server.rs       # Socket server
+│   ├── proxy.rs        # Proxy handling
+│   └── upstream.rs     # Upstream Agent connection
 ├── protocol/
 │   ├── mod.rs
-│   ├── message.rs      # メッセージ型
-│   └── codec.rs        # エンコード/デコード
+│   ├── message.rs      # Message types
+│   └── codec.rs        # Encode/decode
 ├── filter/
-│   ├── mod.rs          # フィルター評価
-│   ├── github.rs       # GitHub API連携
-│   └── keyfile.rs      # キーファイル
+│   ├── mod.rs          # Filter evaluation
+│   ├── github.rs       # GitHub API integration
+│   └── keyfile.rs      # Key files
 ├── config/
 │   ├── mod.rs
-│   └── file.rs         # 設定ファイル
+│   └── file.rs         # Configuration file
 ├── cli/
 │   ├── mod.rs
-│   ├── args.rs         # CLI引数定義
+│   ├── args.rs         # CLI argument definitions
 │   └── commands/
-│       └── run.rs      # メイン実行（inode監視含む）
+│       └── run.rs      # Main execution (incl. inode monitoring)
 └── utils/
-    └── path.rs         # パス処理
+    └── path.rs         # Path handling
 ```
