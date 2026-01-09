@@ -7,24 +7,28 @@
 
   outputs = { self, nixpkgs }:
     let
-      version = "0.1.38";
+      version = "0.1.39";
 
-      # バイナリ配布があるプラットフォームのみ
-      systems = [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      # バイナリ配布があるプラットフォーム
+      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
       # プラットフォームごとのアーカイブ情報
       archives = {
         x86_64-linux = {
           url = "https://github.com/kawaz/authsock-filter/releases/download/v${version}/authsock-filter-x86_64-unknown-linux-gnu.tar.gz";
-          sha256 = "sha256-7HB90YLfOEaWVZfT9AemMo/MjgITVPSTjoCicoc0J/M=";
+          sha256 = "sha256-TSanwYHaLV5cpfpJq5JilfxMpaVj/QA54NvFFaBkjbs=";
+        };
+        aarch64-linux = {
+          url = "https://github.com/kawaz/authsock-filter/releases/download/v${version}/authsock-filter-aarch64-unknown-linux-gnu.tar.gz";
+          sha256 = "sha256-DeQKxpiZGxupAsE+Y0wNBE7RTT4C03SEaucqhz0BL6Q=";
         };
         x86_64-darwin = {
           url = "https://github.com/kawaz/authsock-filter/releases/download/v${version}/authsock-filter-x86_64-apple-darwin.tar.gz";
-          sha256 = "sha256-O7xO18p1TZ0CfbH+SgE2PdezPrR0hWKS9b2ctGG49Kk=";
+          sha256 = "sha256-+fbYZMJdnQPmRPNkzgO4e2e94MUkUhBg5viiWY08GD0=";
         };
         aarch64-darwin = {
           url = "https://github.com/kawaz/authsock-filter/releases/download/v${version}/authsock-filter-aarch64-apple-darwin.tar.gz";
-          sha256 = "sha256-s/7gXChMweYRzH1aFPaYOEIpQvRBmsPLB5G+wehrZiI=";
+          sha256 = "sha256-GmPiKCMz8MRVo9JO8p/Mu/UPQVKVBx2TXcPKAe4TFi0=";
         };
       };
 
@@ -62,7 +66,7 @@
               license = licenses.mit;
               maintainers = [ ];
               mainProgram = "authsock-filter";
-              platforms = [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" ];
+              platforms = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
             };
           };
         });
