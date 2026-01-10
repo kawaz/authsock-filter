@@ -1,0 +1,25 @@
+distributable:
+  url: https://github.com/kawaz/authsock-filter/archive/refs/tags/v{{version}}.tar.gz
+  strip-components: 1
+
+display-name: authsock-filter
+
+versions:
+  github: kawaz/authsock-filter
+
+build:
+  dependencies:
+    rust-lang.org: ">=1.85"
+    rust-lang.org/cargo: "*"
+  script: cargo install $ARGS
+  env:
+    ARGS:
+      - --locked
+      - --path=.
+      - --root={{prefix}}
+
+provides:
+  - bin/authsock-filter
+
+test:
+  script: authsock-filter --version

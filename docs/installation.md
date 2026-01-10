@@ -21,6 +21,18 @@ Or add to your `.mise.toml`:
 authsock-filter = "latest"
 ```
 
+### pkgx
+
+```bash
+pkgx authsock-filter
+```
+
+Or install globally:
+
+```bash
+pkgx install authsock-filter
+```
+
 ### aqua
 
 ```bash
@@ -119,6 +131,12 @@ brew upgrade authsock-filter
 
 ```bash
 mise upgrade authsock-filter
+```
+
+### pkgx
+
+```bash
+pkgx install authsock-filter  # Always installs the latest version
 ```
 
 ### aqua

@@ -32,6 +32,9 @@ See [Discussions](https://github.com/kawaz/authsock-filter/discussions/categorie
 # Homebrew
 brew install kawaz/tap/authsock-filter
 
+# pkgx
+pkgx authsock-filter
+
 # mise
 mise use authsock-filter
 
@@ -270,11 +273,12 @@ authsock-filter completion fish | source
 - Custom completion for `--socket` inline filters
 - Multiple upstream support (each `--upstream` starts a new group)
 - CLI/Config conversion (`--print-config`, `config command`)
+- Register to mise registry
+- pkgx pantry support
 
 ### Planned
 - Feature flags per upstream (`--allow-add`, `--allow-remove`, etc.)
 - Socket-specific options (`--mode`, etc.)
-- Register to mise registry
 
 ## License
 
