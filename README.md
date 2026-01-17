@@ -33,7 +33,7 @@ See [Discussions](https://github.com/kawaz/authsock-filter/discussions/categorie
 brew install kawaz/tap/authsock-filter
 
 # mise
-mise use authsock-filter
+mise use github:kawaz/authsock-filter
 
 # Cargo
 cargo install authsock-filter
@@ -274,7 +274,6 @@ authsock-filter completion fish | source
 ### Planned
 - Feature flags per upstream (`--allow-add`, `--allow-remove`, etc.)
 - Socket-specific options (`--mode`, etc.)
-- Register to mise registry
 
 ## License
 

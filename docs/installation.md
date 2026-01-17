@@ -11,14 +11,14 @@ brew install kawaz/tap/authsock-filter
 ### mise
 
 ```bash
-mise use authsock-filter
+mise use github:kawaz/authsock-filter
 ```
 
 Or add to your `.mise.toml`:
 
 ```toml
 [tools]
-authsock-filter = "latest"
+"github:kawaz/authsock-filter" = "latest"
 ```
 
 ### aqua
@@ -118,7 +118,7 @@ brew upgrade authsock-filter
 ### mise
 
 ```bash
-mise upgrade authsock-filter
+mise upgrade github:kawaz/authsock-filter
 ```
 
 ### aqua
