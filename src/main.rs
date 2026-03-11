@@ -69,6 +69,9 @@ async fn run(cli: Cli) -> Result<(), (ExitCode, anyhow::Error)> {
                 .await
                 .map_err(|e| (ExitCode::GeneralError, e))?,
         },
+        Commands::Log(args) => authsock_filter::cli::commands::log::execute(args)
+            .await
+            .map_err(|e| (ExitCode::GeneralError, e))?,
         Commands::Completion(args) => authsock_filter::cli::commands::completion::execute(args)
             .await
             .map_err(|e| (ExitCode::GeneralError, e))?,

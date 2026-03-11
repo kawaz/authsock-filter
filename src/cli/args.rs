@@ -91,6 +91,18 @@ pub struct UnregisterArgs {
     pub name: String,
 }
 
+/// Arguments for the `log` command
+#[derive(Args, Debug, Clone)]
+pub struct LogArgs {
+    /// Show logs from the last duration (e.g., 30s, 5m, 1h30m, 2d, 500ms)
+    #[arg(long)]
+    pub since: Option<String>,
+
+    /// Follow log output (stream new entries)
+    #[arg(long)]
+    pub follow: bool,
+}
+
 /// Arguments for the `completion` command
 #[derive(Args, Debug, Clone)]
 pub struct CompletionArgs {

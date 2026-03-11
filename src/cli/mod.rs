@@ -9,7 +9,7 @@ pub mod exit_code;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use args::{CompletionArgs, RegisterArgs, RunArgs, UnregisterArgs};
+use args::{CompletionArgs, LogArgs, RegisterArgs, RunArgs, UnregisterArgs};
 
 /// SSH agent proxy with key filtering
 #[derive(Parser, Debug)]
@@ -59,6 +59,9 @@ pub enum Commands {
         #[command(subcommand)]
         command: ServiceCommand,
     },
+
+    /// View service logs
+    Log(LogArgs),
 
     /// Generate shell completions
     Completion(CompletionArgs),
