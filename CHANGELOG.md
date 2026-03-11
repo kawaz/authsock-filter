@@ -4,11 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.40] - 2026-03-12
+
+### Added
+- `log` subcommand for viewing service logs (`--since`, `--follow`)
+- launchd service stdout/stderr logging to `~/Library/Logs/{name}/output.log`
+- `just release` command for automated release workflow
+- justfile for common development tasks (fmt, lint, build, test)
+
+### Fixed
+- Socket initialization no longer aborts all sockets when one fails (graceful skip with error log)
+- `config edit` falls back to default config file when given path doesn't exist
+
 ### Changed
 - README.md: Fixed filter syntax in examples (`type:value` → `type=value`)
 - README.md: Added shell quoting to all glob pattern examples
 - README.md: Updated command structure to match implementation
 - docs/cli-design.md: Updated to reflect current implementation status
+- docs: Added 1Password SSH TouchID recovery knowledge base
+- docs: Updated mise installation to use `github:` prefix
+- docs: Updated service documentation and SSH config integration
+- Removed flake.nix (will use Nixpkgs instead)
+
+### Dependencies
+- Bump time from 0.3.44 to 0.3.47
+- Bump bytes from 1.11.0 to 1.11.1
 
 ## [0.1.32] - 2026-01-06
 
