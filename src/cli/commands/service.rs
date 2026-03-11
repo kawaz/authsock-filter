@@ -266,6 +266,8 @@ mod launchd {
         pub run_at_load: bool,
         pub keep_alive: bool,
         pub environment_variables: HashMap<String, String>,
+        pub standard_out_path: String,
+        pub standard_error_path: String,
     }
 
     pub fn plist_path(name: &str) -> Result<PathBuf> {
@@ -277,6 +279,14 @@ mod launchd {
 
     pub fn label(name: &str) -> String {
         format!("{}.{}", LABEL_PREFIX, name)
+    }
+
+    /// Log directory for service stdout/stderr
+    pub fn log_dir(name: &str) -> Result<PathBuf> {
+        Ok(dirs::home_dir()
+            .context("Failed to get home directory")?
+            .join("Library/Logs")
+            .join(name))
     }
 
     pub fn generate_plist(name: &str, exe_path: &str, config_path: &str) -> Result<Vec<u8>> {
@@ -293,12 +303,19 @@ mod launchd {
             "/usr/local/bin:/usr/bin:/bin".to_string(),
         );
 
+        let log_dir = log_dir(name)?;
+        let log_path = log_dir.join("output.log");
+        let stdout_path = log_path.clone();
+        let stderr_path = log_path;
+
         let plist = LaunchdPlist {
             label: label(name),
             program_arguments: args,
             run_at_load: true,
             keep_alive: true,
             environment_variables: env,
+            standard_out_path: stdout_path.display().to_string(),
+            standard_error_path: stderr_path.display().to_string(),
         };
 
         let mut buf = Vec::new();
@@ -395,6 +412,10 @@ pub async fn register(args: RegisterArgs, config_override: Option<PathBuf>) -> R
         fs::remove_file(&plist_path).context("Failed to remove existing plist")?;
         println!("Removed existing service");
     }
+
+    // Create log directory
+    let log_dir = launchd::log_dir(&args.name)?;
+    fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
 
     // Generate and write plist
     let plist_content = launchd::generate_plist(&args.name, &exe_path_str, &config_path_str)?;
