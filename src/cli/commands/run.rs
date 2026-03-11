@@ -48,37 +48,40 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         );
     }
 
-    // Validate default upstream socket exists
+    // Warn if default upstream socket doesn't exist
     if !config.upstream.exists() {
-        bail!(
-            "Default upstream socket does not exist: {}",
-            config.upstream.display()
+        warn!(
+            upstream = %config.upstream.display(),
+            "Default upstream socket does not exist. Sockets using it will be skipped."
         );
     }
 
     // Cache for upstream connections (to avoid creating duplicate Upstream instances)
     use std::collections::HashMap as UpstreamCache;
     let mut upstream_cache: UpstreamCache<PathBuf, Arc<Upstream>> = UpstreamCache::new();
-    upstream_cache.insert(
-        config.upstream.clone(),
-        Arc::new(Upstream::new(config.upstream.to_string_lossy().to_string())),
-    );
+    if config.upstream.exists() {
+        upstream_cache.insert(
+            config.upstream.clone(),
+            Arc::new(Upstream::new(config.upstream.to_string_lossy().to_string())),
+        );
+    }
 
     // Start proxy servers for each socket
     let mut handles = Vec::new();
     let mut socket_paths = Vec::new();
 
-    for spec in config.sockets.values() {
+    for (name, spec) in &config.sockets {
         // Determine upstream for this socket
         let upstream_path = spec.upstream.as_ref().unwrap_or(&config.upstream);
 
-        // Validate socket-specific upstream if overridden
-        if spec.upstream.is_some() && !upstream_path.exists() {
-            bail!(
-                "Upstream socket does not exist for {}: {}",
-                spec.path.display(),
-                upstream_path.display()
+        // Validate upstream exists
+        if !upstream_path.exists() {
+            error!(
+                name = %name,
+                upstream = %upstream_path.display(),
+                "Upstream socket does not exist, skipping"
             );
+            continue;
         }
 
         // Get or create upstream connection manager
@@ -88,16 +91,29 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
             .clone();
 
         // Parse filters
-        let filter = FilterEvaluator::parse(&spec.filters).context(format!(
-            "Failed to parse filters for socket {}",
-            spec.path.display()
-        ))?;
+        let filter = match FilterEvaluator::parse(&spec.filters) {
+            Ok(f) => f,
+            Err(e) => {
+                error!(
+                    name = %name,
+                    socket = %spec.path.display(),
+                    error = %e,
+                    "Failed to parse filters, skipping"
+                );
+                continue;
+            }
+        };
 
         // Ensure async filters are loaded (e.g., GitHub keys)
-        filter.ensure_loaded().await.context(format!(
-            "Failed to load filter data for socket {}",
-            spec.path.display()
-        ))?;
+        if let Err(e) = filter.ensure_loaded().await {
+            error!(
+                name = %name,
+                socket = %spec.path.display(),
+                error = %e,
+                "Failed to load filter data, skipping"
+            );
+            continue;
+        }
 
         let socket_path_str = spec.path.to_string_lossy().to_string();
 
@@ -107,24 +123,45 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         );
 
         // Prepare socket path (remove existing with symlink protection, create parent dir)
-        prepare_socket_path(&spec.path).context(format!(
-            "Failed to prepare socket at {}",
-            spec.path.display()
-        ))?;
+        if let Err(e) = prepare_socket_path(&spec.path) {
+            error!(
+                name = %name,
+                socket = %spec.path.display(),
+                error = %e,
+                "Failed to prepare socket, skipping"
+            );
+            continue;
+        }
 
         // Bind listener
-        let listener = UnixListener::bind(&spec.path)
-            .context(format!("Failed to bind to socket {}", spec.path.display()))?;
+        let listener = match UnixListener::bind(&spec.path) {
+            Ok(l) => l,
+            Err(e) => {
+                error!(
+                    name = %name,
+                    socket = %spec.path.display(),
+                    error = %e,
+                    "Failed to bind socket, skipping"
+                );
+                continue;
+            }
+        };
 
         // Set socket permissions to 0600 (owner read/write only)
-        set_socket_permissions(&spec.path).context(format!(
-            "Failed to set permissions on socket at {}",
-            spec.path.display()
-        ))?;
+        if let Err(e) = set_socket_permissions(&spec.path) {
+            error!(
+                name = %name,
+                socket = %spec.path.display(),
+                error = %e,
+                "Failed to set socket permissions, skipping"
+            );
+            continue;
+        }
 
         // Record inode for monitoring
         let inode = std::fs::metadata(&spec.path).ok().map(|m| m.ino());
         info!(
+            name = %name,
             path = %spec.path.display(),
             upstream = %upstream_path.display(),
             inode = ?inode,
@@ -154,6 +191,10 @@ pub async fn execute(args: RunArgs, config_path: Option<PathBuf>) -> Result<()> 
         });
 
         handles.push(handle);
+    }
+
+    if handles.is_empty() {
+        bail!("No sockets could be started. Check the errors above.");
     }
 
     info!(
