@@ -52,7 +52,9 @@ async fn show(config_override: Option<PathBuf>) -> Result<()> {
 
 /// Open configuration in editor
 async fn edit(config_override: Option<PathBuf>) -> Result<()> {
-    let config_path = config_override.or_else(find_config_file);
+    let config_path = config_override
+        .filter(|p| p.is_file())
+        .or_else(find_config_file);
 
     let path = match config_path {
         Some(p) => p,
